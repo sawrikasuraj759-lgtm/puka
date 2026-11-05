@@ -12,7 +12,6 @@
     "lint": "node --check server.ts"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@kaels/casileys": "github:kyleee-max/casileys#093ee781cab2760380ddc463b79959aeea6472e4",
     "@mrnima/facebook-downloader": "^1.0.0",
     "@mrnima/instagram-downloader": "^1.0.0",
