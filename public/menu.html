@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#090313">
+<title>YASHI HALLS MINI • Neon Menu</title>
+<style>
+:root{--bg:#08020f;--panel:#10051b;--violet:#a855f7;--pink:#f0abfc;--cyan:#67e8f9;--muted:#b8a1ca;--line:#4b1d70;--text:#fff8ff}
+*{box-sizing:border-box}
+body{margin:0;padding:14px 10px 30px;color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:radial-gradient(ellipse at 50% -10%,#4a0871 0,#180626 34%,#08020f 75%);min-height:100vh}
+.shell{max-width:720px;margin:auto;border:1px solid #8b35c8;border-radius:25px;background:linear-gradient(155deg,#11051d,#090311 70%);overflow:hidden;box-shadow:0 0 35px #a020ff38,0 0 4px #efb2ff55}
+.hero{position:relative;isolation:isolate;background:#13051f;overflow:hidden}
+.hero img{display:block;width:100%;aspect-ratio:1/1;max-height:410px;object-fit:cover}
+.hero:after{content:"";position:absolute;inset:0;z-index:0;background:linear-gradient(0deg,#0d0417 0%,transparent 38%);pointer-events:none}
+.pill{position:absolute;top:12px;left:12px;z-index:1;padding:7px 10px;border-radius:50px;border:1px solid #b85cff88;background:#10051bdc;font-size:10px;font-weight:900;letter-spacing:.7px;box-shadow:0 0 16px #a855f755}
+.pill i{color:#4fffc1;font-style:normal}
+.hero-bottom{padding:0 15px 17px;text-align:center;background:linear-gradient(90deg,#1a0629,#270840,#13051f)}
+.kicker{font-size:10px;letter-spacing:2px;color:#d9b7f4;font-weight:900}
+h1{margin:8px 0 5px;font-size:clamp(21px,5vw,30px);text-shadow:0 0 15px #ce73ff}
+.sub{font-size:12px;color:#c5acd7}
+.rule{height:1px;background:linear-gradient(90deg,transparent,#c45cff,transparent);margin-top:16px}
+main{padding:17px 13px 16px}
+.headline{text-align:center;font-size:12px;letter-spacing:2px;color:#f0c8ff;font-weight:950;margin:2px 0 15px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.category{display:flex;align-items:center;gap:10px;min-width:0;width:100%;text-align:left;padding:12px 10px;border-radius:16px;border:1px solid #61258b;background:linear-gradient(135deg,#211034,#12071e 75%);color:#fff;cursor:pointer;box-shadow:inset 0 1px #ffffff0b,0 5px 15px #0004;transition:transform .18s,border-color .18s,box-shadow .18s}
+.category:active{transform:scale(.98)}
+.category.selected{border-color:#e6a7ff;box-shadow:0 0 0 1px #a855f766,0 0 18px #b44cff38;background:linear-gradient(135deg,#4a176a,#211033)}
+.cicon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,#bd5cff,#6321a0 65%,#37134f);box-shadow:0 0 16px #a855f755,inset 0 1px #fff8;font-size:20px}
+.cbody{min-width:0;flex:1}.cbody strong{font-size:10.5px;line-height:1.35;display:block}.cbody small{display:block;margin-top:4px;color:#c4abd8;font-size:9px;line-height:1.3}
+.arrow{font-size:20px;color:#e5b7ff;transition:transform .2s}.category.selected .arrow{transform:rotate(90deg)}
+/* The submenu appears underneath the full category grid in its own vivid panel. */
+.submenu{display:none;margin-top:15px;border-radius:19px;overflow:hidden;border:1px solid #a855f7;background:linear-gradient(145deg,#24103d,#160824 55%,#0f0518);box-shadow:0 0 25px #9333ea32, inset 0 0 20px #c084fc0b;animation:rise .22s ease-out}
+.submenu.open{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.sub-top{padding:15px;background:linear-gradient(100deg,#6420a0,#39135e 60%,#24103c);border-bottom:1px solid #c084fc55;display:flex;align-items:center;gap:11px}
+.sub-symbol{width:44px;height:44px;display:grid;place-items:center;flex-shrink:0;border-radius:14px;background:#ffffff18;border:1px solid #ffffff45;font-size:22px}
+.sub-top h2{font-size:15px;margin:0 0 4px}.sub-top p{margin:0;color:#f0d9ff;font-size:11px}
+.close{margin-left:auto;border:1px solid #ffffff55;background:#ffffff14;color:white;border-radius:10px;padding:8px 10px;font-size:11px;font-weight:800;cursor:pointer}
+.sub-content{padding:12px}
+.sub-label{font-size:10px;letter-spacing:1.5px;color:#dcb4ff;font-weight:900;margin:1px 0 10px}
+.commands{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cmd{display:flex;align-items:center;gap:7px;min-width:0;padding:10px 9px;border-radius:12px;border:1px solid #66308c;background:linear-gradient(135deg,#32134a,#20102e);color:#f7eaff;min-height:43px}
+.cmd:before{content:"›";font-size:17px;color:#e6a8ff;font-weight:900}
+.cmd code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;overflow-wrap:anywhere;flex:1}
+.cmd button{flex-shrink:0;border:1px solid #a855f7;background:#60238b;color:#fff;border-radius:7px;padding:6px 7px;font-size:9px;font-weight:900;cursor:pointer}
+.cmd button:active{background:#9333ea}
+.brand-icon{width:24px;height:24px;flex:0 0 24px;display:grid;place-items:center}
+.brand-icon svg{width:22px;height:22px;display:block}
+.cmd.brand-command{padding-left:8px}.cmd.brand-command:before{display:none}
+.brand-tiktok{color:#fff;filter:drop-shadow(-1px 0 #25f4ee) drop-shadow(1px 0 #fe2c55)}
+.brand-youtube{color:#ff4545}.brand-instagram{color:#ff73b7}.brand-facebook{color:#4d9cff}.brand-x{color:#fff}
+.paging{display:flex;gap:8px;margin-top:12px}.paging button{flex:1;border:1px solid #8b43b6;background:#311047;color:#f7eaff;border-radius:11px;padding:10px;font-size:11px;font-weight:900;cursor:pointer}
+.quick-title{text-align:center;margin:19px 0 10px;color:#e4bcff;font-size:11px;font-weight:950;letter-spacing:2px}
+.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.quick button{border:1px solid #8b36b9;border-radius:13px;background:linear-gradient(135deg,#54147c,#26083d);color:#fff;padding:12px 3px;font-size:12px;font-weight:950;cursor:pointer;box-shadow:inset 0 1px #ffffff16}
+.quick button:nth-child(2){color:#6bffc3}.quick button:nth-child(3){color:#ffe680}
+.quick small{font-size:10px;color:#d5b9e8;font-weight:500}
+.linklist{display:grid;gap:9px;margin-top:17px}
+.link{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid #48215f;border-radius:14px;background:#10061b;color:#fff;text-decoration:none}
+.link .ico{font-size:19px;color:#dfaaff}.link strong{display:block;font-size:12px}.link small{color:#bca5ce;font-size:10px}
+.foot{text-align:center;border-top:1px solid #321743;margin-top:17px;padding:14px 4px 3px;color:#9479aa;font-size:9px;letter-spacing:1.2px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:none;background:#381253;border:1px solid #d58aff;color:#fff;border-radius:30px;padding:10px 15px;box-shadow:0 0 22px #a855f766;z-index:5;font-size:12px;max-width:90%;text-align:center}
+@media(max-width:430px){body{padding:7px 5px 22px}.shell{border-radius:19px}main{padding:14px 9px}.cards{gap:7px}.category{padding:10px 7px;gap:7px;min-height:75px}.cicon{width:35px;height:35px;flex-basis:35px;font-size:17px}.cbody strong{font-size:9.5px}.cbody small{font-size:8px}.commands{grid-template-columns:1fr}.hero img{max-height:360px}}
+</style>
+</head>
+<body>
+<div class="shell">
+ <header class="hero">
+  <img src="/assets/aistudio/file_00000000a5988208ba0d8759a81525b4_ee7e1d49.png" alt="YASHI HALLS MINI Logo" onerror="this.src='https://i.ibb.co/BVhW7W1R/file-000000007c3c8210ae1b96d28b22c655.png'">
+  <div class="pill">👑 MINI BOT &nbsp; <i>● ONLINE 24/7</i></div>
+ </header>
+ <div class="hero-bottom">
+  <div class="kicker">👑 YASHI HALLS MINI • WA ASSISTANT</div>
+  <h1>✨ ALL COMMANDS MENU ✨</h1>
+  <div class="sub">Tap a category — its submenu opens below</div><div class="rule"></div>
+ </div>
+ <main>
+  <div class="headline">💜 SELECT A CATEGORY 💜</div>
+  <div class="cards" id="categories"></div>
+  <section class="submenu" id="submenu" aria-live="polite">
+   <div class="sub-top"><div class="sub-symbol" id="subIcon">✦</div><div><h2 id="subTitle">SUBMENU</h2><p id="subDesc">Select a command to copy</p></div><button class="close" onclick="closeSubmenu()">✕ CLOSE</button></div>
+   <div class="sub-content"><div class="sub-label">⚡ AVAILABLE COMMANDS</div><div class="commands" id="commands"></div><div class="paging" id="paging"></div></div>
+  </section>
+  <div class="quick-title">⚡ QUICK ACTIONS ⚡</div>
+  <div class="quick">
+   <button onclick="copyText('.ping')">⚡ PING<br><small>.ping</small></button>
+   <button onclick="copyText('.alive')">🟢 ALIVE<br><small>.alive</small></button>
+   <button onclick="copyText('.owner')">👑 OWNER<br><small>.owner</small></button>
+  </div>
+  <div class="linklist">
+   <a class="link" href="https://whatsapp.com/channel/0029Vb927N4GJP8MS1yurM2Z" target="_blank" rel="noopener"><span class="ico">➤</span><span><strong>OFFICIAL CHANNEL</strong><small>Join WhatsApp Channel</small></span><span class="arrow">›</span></a>
+   <a class="link" href="tel:0740712934"><span class="ico">☎</span><span><strong>SUPPORT HOTLINE</strong><small>0740712934</small></span><span class="arrow">›</span></a>
+  </div>
+  <div class="foot">⚡ YASHI HALLS MINI • [MINI PLAN] • POWERED BY YASHI HALLS ⚡</div>
+ </main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const data=[
+{id:'profile',icon:'👤',name:'PROFILE & STATUS',desc:'Status • DP • Name • Bio',cmd:['.status','.setstatus <text>','.statusview','.statussave','.statusreact','.setdp','.getdp @user','.setname <name>','.setbio <text>']},
+{id:'download',icon:'📥',name:'DOWNLOAD',desc:'Song • Video • Audio • Mediafire',cmd:['.song','.video','.play','.audio','.ytsearch','.mediafire / .mf','.tiktok / .tt','.fb','.ig','.twitter','.apk','.lyrics']},
+{id:'movies',icon:'🎬',name:'MOVIES & SUBTITLES',desc:'Cineru • Film • Dub • Sub',cmd:['.cineru','.cineru <name> set','.film / .movie','.filmdub / .dub / .sinhaladub','.cinesubz','.sinhalasub']},
+{id:'ai',icon:'🤖',name:'AI & SMART TOOLS',desc:'Gemini • Translate • Write',cmd:['.ai / .ask / .gemini','.translate / .tr','.summarize','.write','.code','.imagine','.img','.ocr','.voicetrans','.transcribe / .vtext','.shazam / .findsong','.aisticker','.sticker / .s','.math / .solve','.cv / .resume','.food / .calorie','.filter','.meme','.quote']},
+{id:'group',icon:'👥',name:'GROUP MANAGEMENT',desc:'Kick • Promote • Link • Warn',cmd:['.groupinfo','.admins','.tagall / .everyone','.hidetag','.kick / .remove','.add','.promote','.demote','.mute / .close','.unmute / .open','.link / .invite','.revoke','.setgroupname','.setdesc','.warn','.warns','.resetwarn','.antilink','.antispam','.welcome','.poll']},
+{id:'games',icon:'🎮',name:'GAMES & FUN',desc:'Quiz • Guess • Slot • Meme',cmd:['.quiz','.guess','.roll','.flip','.slot','.leaderboard / .top','.meme','.quote']},
+{id:'settings',icon:'⚙️',name:'BOT SETTINGS',desc:'Ping • Alive • Autochat • Owner',cmd:['.menu','.ping','.alive','.uptime','.botinfo','.settings','.autochat','.voicereply','.channelreact','.public','.private','.setprefix','.setbotname','.setbotlogo','.owner','.broadcast','.restart','.autoreact','.antidelete','.autoread','.autorecord','.afk','.save']},
+{id:'utilities',icon:'💰',name:'DAILY & UTILITIES',desc:'Gold • Crypto • Weather • Time',cmd:['.gold / .crypto / .rates','.bill','.remind','.weather','.time','.date']}
+];
+const root=document.getElementById('categories');let selected=null,page=0;const perPage=8;
+data.forEach(c=>{const b=document.createElement('button');b.className='category';b.dataset.id=c.id;b.innerHTML=`<span class="cicon">${c.icon}</span><span class="cbody"><strong>${c.name}</strong><small>${c.desc}</small></span><span class="arrow">›</span>`;b.onclick=()=>openSubmenu(c.id);root.appendChild(b)});
+function openSubmenu(id,p=0){const c=data.find(x=>x.id===id);if(!c)return;selected=id;page=p;document.querySelectorAll('.category').forEach(b=>b.classList.toggle('selected',b.dataset.id===id));const box=document.getElementById('submenu');box.classList.add('open');document.getElementById('subIcon').textContent=c.icon;document.getElementById('subTitle').textContent=c.name;document.getElementById('subDesc').textContent=`${c.cmd.length} commands • Page ${page+1}/${Math.max(1,Math.ceil(c.cmd.length/perPage))}`;const list=document.getElementById('commands');list.innerHTML='';c.cmd.slice(page*perPage,(page+1)*perPage).forEach(command=>{const row=document.createElement('div');row.className='cmd';const brand=getBrand(command);if(brand){row.classList.add('brand-command');const icon=document.createElement('span');icon.className='brand-icon '+brand.cls;icon.innerHTML=brand.svg;row.appendChild(icon)}const code=document.createElement('code');code.textContent=command;const btn=document.createElement('button');btn.textContent='COPY';btn.onclick=()=>copyText(command.split(' / ')[0]);row.append(code,btn);list.appendChild(row)});const paging=document.getElementById('paging');paging.innerHTML='';if(page>0){const prev=document.createElement('button');prev.textContent='← PREVIOUS';prev.onclick=()=>openSubmenu(id,page-1);paging.appendChild(prev)}if((page+1)*perPage<c.cmd.length){const next=document.createElement('button');next.textContent='NEXT →';next.onclick=()=>openSubmenu(id,page+1);paging.appendChild(next)}const close=document.createElement('button');close.textContent='✕ CLOSE MENU';close.onclick=closeSubmenu;paging.appendChild(close);box.scrollIntoView({behavior:'smooth',block:'nearest'})}
+function getBrand(command){
+const s=command.toLowerCase();
+const svg={
+tiktok:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.11V2h-3.4v13.67a2.9 2.9 0 1 1-2.9-2.9c.22 0 .44.03.65.08V9.4a6.3 6.3 0 1 0 5.7 6.27V9.93a8.2 8.2 0 0 0 4.8 1.55V8.1a4.85 4.85 0 0 1-1.08-.11Z"/></svg>',
+youtube:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.12C19.55 3.57 12 3.57 12 3.57s-7.55 0-9.4.51A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.12c1.85.51 9.4.51 9.4.51s7.55 0 9.4-.51a3 3 0 0 0 2.1-2.12A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.55 15.6V8.4L15.8 12Z"/></svg>',
+instagram:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>',
+facebook:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.4 21v-8.2h2.8l.42-3.2H13.4V7.55c0-.93.26-1.56 1.6-1.56h1.7V3.13A22 22 0 0 0 14.2 3c-2.48 0-4.18 1.51-4.18 4.28V9.6H7.2v3.2h2.82V21Z"/></svg>',
+x:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 2H22l-6.78 7.75L23.2 22h-6.25l-4.9-7.43L5.55 22H2.4l7.25-8.29L1.8 2h6.4l4.43 6.78ZM17.8 19.8h1.73L7.27 4.08H5.42Z"/></svg>'
+};
+if(/\.tiktok\b|\.tt\b/.test(s))return {cls:'brand-tiktok',svg:svg.tiktok};
+if(/\.song\b|\.play\b|\.audio\b|\.ytsearch\b|\.video\b|\.lyrics\b/.test(s))return {cls:'brand-youtube',svg:svg.youtube};
+if(/\.ig\b/.test(s))return {cls:'brand-instagram',svg:svg.instagram};
+if(/\.fb\b/.test(s))return {cls:'brand-facebook',svg:svg.facebook};
+if(/\.twitter\b/.test(s))return {cls:'brand-x',svg:svg.x};
+return null;
+}
+function closeSubmenu(){document.getElementById('submenu').classList.remove('open');document.querySelectorAll('.category').forEach(b=>b.classList.remove('selected'));selected=null}
+async function copyText(value){try{await navigator.clipboard.writeText(value)}catch(e){const t=document.createElement('textarea');t.value=value;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove()}const toast=document.getElementById('toast');toast.textContent='✓ Copied: '+value;toast.style.display='block';clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>toast.style.display='none',1800)}
+</script>
+</body>
+</html>

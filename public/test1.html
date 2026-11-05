@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YASHI HALLS MINI</title>
+<style>
+* {
+margin: 0;
+padding: 0;
+box-sizing: border-box;
+}
+
+body {
+font-family: Arial, sans-serif;
+background: #10111b;
+color: #fff;
+padding: 18px;
+}
+
+.container {
+max-width: 480px;
+margin: auto;
+}
+
+.header {
+background: linear-gradient(135deg, #242044, #171a31);
+border: 1px solid #39315f;
+border-radius: 20px;
+padding: 25px 15px;
+text-align: center;
+}
+
+.logo {
+width: 82px;
+height: 82px;
+border-radius: 50%;
+object-fit: cover;
+border: 3px solid #a78bfa;
+margin-bottom: 12px;
+}
+
+.header h1 {
+font-size: 21px;
+letter-spacing: 1px;
+}
+
+.header p {
+color: #aaa6c7;
+font-size: 12px;
+margin-top: 7px;
+}
+
+.status {
+display: inline-block;
+background: #173d32;
+color: #62e6a1;
+padding: 7px 14px;
+border-radius: 20px;
+font-size: 11px;
+margin-top: 13px;
+}
+
+.stats {
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 10px;
+margin: 15px 0;
+}
+
+.stat {
+background: #1c1d2d;
+border: 1px solid #303149;
+padding: 15px 5px;
+border-radius: 14px;
+text-align: center;
+}
+
+.stat h2 {
+color: #b69aff;
+font-size: 19px;
+}
+
+.stat p {
+font-size: 10px;
+color: #aaa;
+margin-top: 5px;
+}
+
+.heading {
+font-size: 15px;
+margin: 23px 3px 12px;
+color: #d6c9ff;
+}
+
+.categories {
+display: grid;
+grid-template-columns: repeat(2, 1fr);
+gap: 12px;
+}
+
+.category {
+background: linear-gradient(145deg, #292443, #1b2037);
+border: 1px solid #49406d;
+border-radius: 16px;
+padding: 18px 14px;
+text-align: left;
+color: white;
+cursor: pointer;
+transition: 0.2s;
+}
+
+.category:active,
+.category.active {
+background: linear-gradient(145deg, #6341a5, #34306b);
+border-color: #b69aff;
+transform: scale(0.98);
+}
+
+.category-icon {
+font-size: 27px;
+margin-bottom: 11px;
+}
+
+.category h3 {
+font-size: 14px;
+margin-bottom: 6px;
+}
+
+.category p {
+font-size: 10px;
+color: #c1badb;
+}
+
+.submenu {
+display: none;
+background: #1b1c2b;
+border: 1px solid #39334f;
+border-radius: 16px;
+padding: 16px;
+margin-top: 13px;
+animation: show 0.25s ease;
+}
+
+.submenu.show {
+display: block;
+}
+
+@keyframes show {
+from {
+opacity: 0;
+transform: translateY(-7px);
+}
+to {
+opacity: 1;
+transform: translateY(0);
+}
+}
+
+.submenu h3 {
+color: #cbb8ff;
+font-size: 15px;
+margin-bottom: 12px;
+}
+
+.command {
+background: #27263c;
+border: 1px solid #383450;
+border-radius: 10px;
+padding: 12px;
+margin-top: 8px;
+font-size: 13px;
+color: #eee9ff;
+}
+
+.command span {
+color: #b69aff;
+font-weight: bold;
+margin-right: 8px;
+}
+
+.footer {
+text-align: center;
+padding: 25px 5px 12px;
+font-size: 10px;
+color: #8f8aa7;
+line-height: 1.8;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <img
+    src="https://i.ibb.co/BVhW7W1R/file-000000007c3c8210ae1b96d28b22c655.png"
+    class="logo"
+    alt="YASHI HALLS"
+    onerror="this.src='https://i.ibb.co/gM1MwL9T/IMG-20261024-WA0008.jpg'">
+
+    <h1>👑 YASHI HALLS MINI</h1>
+    <p>WhatsApp Assistant • MINI PLAN</p>
+
+    <div class="status">● MENU PREVIEW</div>
+</div>
+
+<div class="stats">
+    <div class="stat">
+        <h2>06</h2>
+        <p>Categories</p>
+    </div>
+    <div class="stat">
+        <h2>24+</h2>
+        <p>Commands</p>
+    </div>
+    <div class="stat">
+        <h2>24/7</h2>
+        <p>Assistant</p>
+    </div>
+</div>
+
+<h3 class="heading">📂 MAIN MENU</h3>
+
+<div class="categories">
+
+    <button class="category" onclick="openMenu('download',this)">
+        <div class="category-icon">📥</div>
+        <h3>Downloads</h3>
+        <p>Music, Videos & Social Media</p>
+    </button>
+
+    <button class="category" onclick="openMenu('ai',this)">
+        <div class="category-icon">🤖</div>
+        <h3>AI Tools</h3>
+        <p>Artificial Intelligence</p>
+    </button>
+
+    <button class="category" onclick="openMenu('group',this)">
+        <div class="category-icon">👥</div>
+        <h3>Group Tools</h3>
+        <p>Admin & Protection</p>
+    </button>
+
+    <button class="category" onclick="openMenu('games',this)">
+        <div class="category-icon">🎮</div>
+        <h3>Games</h3>
+        <p>Fun & Entertainment</p>
+    </button>
+
+    <button class="category" onclick="openMenu('profile',this)">
+        <div class="category-icon">👤</div>
+        <h3>Profile</h3>
+        <p>Account & Status</p>
+    </button>
+
+    <button class="category" onclick="openMenu('settings',this)">
+        <div class="category-icon">⚙️</div>
+        <h3>Settings</h3>
+        <p>Bot Configuration</p>
+    </button>
+
+</div>
+
+<div class="submenu" id="submenu">
+    <h3 id="submenuTitle"></h3>
+    <div id="submenuCommands"></div>
+</div>
+
+<div class="footer">
+    👑 YASHI HALLS MINI<br>
+    MINI PLAN • WHATSAPP ASSISTANT<br>
+    POWERED BY YASHI HALLS
+</div>
+</div>
+<script>
+const menus = {
+download: {
+title: "📥 DOWNLOAD MENU",
+commands: [
+".song",
+".video",
+".play",
+".audio",
+".ytsearch",
+".tt",
+".fb",
+".ig",
+".twitter",
+".apk",
+".lyrics"
+]
+},
+
+ai: {
+title: "🤖 AI TOOLS MENU",
+commands: [
+".ai",
+".gemini",
+".imagine",
+".translate",
+".write",
+".code",
+".ocr",
+".transcribe"
+]
+},
+
+group: {
+title: "👥 GROUP TOOLS MENU",
+commands: [
+".kick",
+".add",
+".promote",
+".demote",
+".mute",
+".unmute",
+".antilink",
+".warn",
+".link"
+]
+},
+
+games: {
+title: "🎮 GAMES MENU",
+commands: [
+".quiz",
+".guess",
+".slot",
+".tictactoe"
+]
+},
+
+profile: {
+title: "👤 PROFILE MENU",
+commands: [
+".me",
+".status",
+".setstatus",
+".setdp",
+".setname",
+".setbio"
+]
+},
+
+settings: {
+title: "⚙️ SETTINGS MENU",
+commands: [
+".menu",
+".ping",
+".alive",
+".owner",
+".public",
+".private",
+".restart"
+]
+}
+};
+
+function openMenu(name, element) {
+const submenu = document.getElementById("submenu");
+const title = document.getElementById("submenuTitle");
+const commands = document.getElementById("submenuCommands");
+
+if (element.classList.contains("active")) {
+element.classList.remove("active");
+submenu.classList.remove("show");
+return;
+}
+
+document.querySelectorAll(".category").forEach(card => {
+card.classList.remove("active");
+});
+
+element.classList.add("active");
+
+title.textContent = menus[name].title;
+commands.innerHTML = "";
+
+menus[name].commands.forEach((command, index) => {
+const item = document.createElement("div");
+item.className = "command";
+
+const number = String(index + 1).padStart(2, "0");
+item.innerHTML = "<span>" + number + ".</span> " + command;
+
+commands.appendChild(item);
+});
+
+submenu.classList.add("show");
+}
+</script>
+</body>
+</html>
