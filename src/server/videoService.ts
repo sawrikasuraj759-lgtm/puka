@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { extractYoutubeId, searchYoutubeVideo } from "./audioService";
+import { extractYoutubeId, searchYoutubeVideo, getYtDlpBinary } from "./audioService";
 
 const execFileAsync = promisify(execFile);
 
@@ -17,6 +17,10 @@ export interface VideoDownloadResult {
   duration?: string;
   quality?: string;
   sourceUrl?: string;
+  thumbnailUrl?: string;
+  author?: string;
+  views?: string;
+  isDirectDownloadable?: boolean;
   error?: string;
 }
 
@@ -42,9 +46,9 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
       const sizeMB = sizeBytes > 0 ? (sizeBytes / (1024 * 1024)).toFixed(1) + " MB" : "Direct Video Stream";
       const fileName = clean.split("/").pop()?.split("?")[0] || "video.mp4";
 
-      // If <= 40MB, fetch directly into buffer for instant WhatsApp delivery
-      if (sizeBytes > 0 && sizeBytes <= 40 * 1024 * 1024) {
-        const fileResp = await fetch(clean, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(10000) });
+      // If <= 50MB, fetch directly into buffer for instant WhatsApp delivery
+      if (sizeBytes > 0 && sizeBytes <= 50 * 1024 * 1024) {
+        const fileResp = await fetch(clean, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(12000) });
         if (fileResp.ok) {
           const buf = Buffer.from(await fileResp.arrayBuffer());
           return {
@@ -56,6 +60,7 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
             fileSizeStr: sizeMB,
             quality: "HD Direct",
             sourceUrl: clean,
+            isDirectDownloadable: true,
           };
         }
       }
@@ -68,6 +73,7 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
         fileSizeStr: sizeMB,
         quality: "HD Direct",
         sourceUrl: clean,
+        isDirectDownloadable: true,
       };
     } catch {
       return {
@@ -77,12 +83,14 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
         fileSizeStr: "Online Stream",
         quality: "HD Direct",
         sourceUrl: clean,
+        isDirectDownloadable: true,
       };
     }
   }
 
   // 2. TikTok URL
   if (clean.includes("tiktok.com")) {
+    // Strategy A: TikWM API
     try {
       const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(clean)}`, {
         signal: AbortSignal.timeout(6000),
@@ -93,7 +101,6 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
         const vidTitle = json.data.title || "TikTok Video";
         const duration = `${json.data.duration || 0}s`;
 
-        // Fetch buffer for instant delivery
         try {
           const vidRes = await fetch(directPlay, { signal: AbortSignal.timeout(10000) });
           if (vidRes.ok) {
@@ -107,6 +114,7 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
               quality: "1080p HD (No Watermark)",
               sourceUrl: clean,
               fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
+              isDirectDownloadable: true,
             };
           }
         } catch {}
@@ -119,21 +127,55 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
           quality: "1080p HD (No Watermark)",
           sourceUrl: clean,
           fileSizeStr: json.data.size ? (json.data.size / (1024 * 1024)).toFixed(1) + " MB" : "HD Video",
+          isDirectDownloadable: true,
         };
       }
     } catch (err: any) {
-      console.warn("[VideoService] TikTok extraction error:", err?.message);
+      console.warn("[VideoService] TikWM error:", err?.message);
     }
+
+    // Strategy B: ruhend ttdl
+    try {
+      // @ts-ignore
+      const { ttdl } = await import("ruhend-scraper");
+      const res = await ttdl(clean);
+      if (res && (res.video_hd || res.video)) {
+        const vidUrl = res.video_hd || res.video;
+        try {
+          const dlRes = await fetch(vidUrl, { signal: AbortSignal.timeout(10000) });
+          if (dlRes.ok) {
+            const buf = Buffer.from(await dlRes.arrayBuffer());
+            return {
+              success: true,
+              videoUrl: vidUrl,
+              buffer: buf,
+              title: res.title || "TikTok Video",
+              quality: "HD No Watermark",
+              sourceUrl: clean,
+              fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
+              isDirectDownloadable: true,
+            };
+          }
+        } catch {}
+      }
+    } catch {}
   }
 
   // 3. Facebook URL
   if (clean.includes("facebook.com") || clean.includes("fb.watch") || clean.includes("fb.com")) {
     try {
-      // Provider 1: ruhend-scraper fbdl
       // @ts-ignore
-      const { fbdl } = await import("ruhend-scraper");
-      const fbRes = await fbdl(clean);
-      const vidUrl = Array.isArray(fbRes) ? fbRes[0] : fbRes;
+      const { fbdl2, fbdl } = await import("ruhend-scraper");
+      const fbRes2 = await fbdl2(clean).catch(() => null);
+      let vidUrl: string | null = null;
+      if (fbRes2 && fbRes2.data && fbRes2.data.length > 0 && fbRes2.data[0].url) {
+        vidUrl = fbRes2.data[0].url;
+      }
+      if (!vidUrl) {
+        const fbRes1 = await fbdl(clean).catch(() => null);
+        vidUrl = Array.isArray(fbRes1) ? fbRes1[0] : fbRes1;
+      }
+
       if (vidUrl && typeof vidUrl === "string" && vidUrl.startsWith("http")) {
         try {
           const res = await fetch(vidUrl, {
@@ -147,9 +189,10 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
               videoUrl: vidUrl,
               buffer: buf,
               title: "Facebook Video",
-              quality: "HD Stream",
+              quality: "720p HD",
               sourceUrl: clean,
               fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
+              isDirectDownloadable: true,
             };
           }
         } catch {}
@@ -158,16 +201,18 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
           success: true,
           videoUrl: vidUrl,
           title: "Facebook Video",
-          quality: "HD Stream",
+          quality: "720p HD",
           sourceUrl: clean,
+          isDirectDownloadable: true,
         };
       }
     } catch {}
 
-    // Provider 2: yt-dlp fast download for Facebook
+    // Fallback: yt-dlp fast download for Facebook
+    const ytDlp = getYtDlpBinary();
     const tempFb = path.join("/tmp", `fb_${Date.now()}.mp4`);
     try {
-      await execFileAsync("yt-dlp", ["--max-filesize", "60M", "-o", tempFb, clean], { timeout: 15000 });
+      await execFileAsync(ytDlp, ["--max-filesize", "60M", "-o", tempFb, clean], { timeout: 15000 });
       if (fs.existsSync(tempFb)) {
         const buf = fs.readFileSync(tempFb);
         fs.unlinkSync(tempFb);
@@ -178,6 +223,7 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
           quality: "HD Video",
           sourceUrl: clean,
           fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
+          isDirectDownloadable: true,
         };
       }
     } catch (e: any) {
@@ -187,7 +233,6 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
 
   // 4. Twitter / X URL
   if (clean.includes("twitter.com") || clean.includes("x.com")) {
-    // Provider 1: savetwitter.net
     try {
       const form = new URLSearchParams({ q: clean, lang: "en", cftoken: "" });
       const res = await fetch("https://savetwitter.net/api/ajaxSearch", {
@@ -220,6 +265,7 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
                   quality: "720p HD",
                   sourceUrl: clean,
                   fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
+                  isDirectDownloadable: true,
                 };
               }
             } catch {}
@@ -228,10 +274,10 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
       }
     } catch {}
 
-    // Provider 2: yt-dlp native download for Twitter/X
+    const ytDlp = getYtDlpBinary();
     const tempTw = path.join("/tmp", `tw_${Date.now()}.mp4`);
     try {
-      await execFileAsync("yt-dlp", ["--max-filesize", "60M", "-o", tempTw, clean], { timeout: 15000 });
+      await execFileAsync(ytDlp, ["--max-filesize", "60M", "-o", tempTw, clean], { timeout: 15000 });
       if (fs.existsSync(tempTw)) {
         const buf = fs.readFileSync(tempTw);
         fs.unlinkSync(tempTw);
@@ -242,6 +288,7 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
           quality: "HD Video",
           sourceUrl: clean,
           fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
+          isDirectDownloadable: true,
         };
       }
     } catch (e: any) {
@@ -251,142 +298,104 @@ export async function resolveVideo(query: string): Promise<VideoDownloadResult> 
 
   // 5. Instagram URL
   if (clean.includes("instagram.com")) {
-    // Provider 1: SnapVideo scraper
     try {
-      const snapRes = await fetch("https://snapvideo.app/en", { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(4000) });
-      const snapHtml = await snapRes.text();
-      const expMatch = snapHtml.match(/k_exp="([^"]+)"/);
-      const tokenMatch = snapHtml.match(/k_token="([^"]+)"/);
+      // @ts-ignore
+      const { igdl2, igdl } = await import("ruhend-scraper");
+      let igRes = await igdl2(clean).catch(() => null);
+      let vidUrl: string | null = null;
+      if (igRes && igRes.data && igRes.data.length > 0 && igRes.data[0].url) {
+        vidUrl = igRes.data[0].url;
+      }
+      if (!vidUrl) {
+        const igRes1 = await igdl(clean).catch(() => null);
+        vidUrl = Array.isArray(igRes1) ? igRes1[0] : (igRes1?.video || igRes1?.url);
+      }
 
-      if (expMatch && tokenMatch) {
-        const form = new URLSearchParams({
-          k_exp: expMatch[1],
-          k_token: tokenMatch[1],
-          q: clean,
-          t: "media",
-          lang: "en",
-          v: "v2",
-        });
-
-        const apiRes = await fetch("https://snapvideo.app/api/ajaxSearch", {
-          method: "POST",
-          headers: {
-            "content-type": "application/x-www-form-urlencoded",
-            origin: "https://snapvideo.app",
-            referer: "https://snapvideo.app/en",
-            "user-agent": USER_AGENT,
-          },
-          body: form.toString(),
-          signal: AbortSignal.timeout(6000),
-        });
-
-        if (apiRes.ok) {
-          const apiJson = await apiRes.json();
-          if (apiJson.status === "ok" && apiJson.data) {
-            const dlMatch = apiJson.data.match(/href="([^"]*(?:dl\.snapcdn\.app|cdninstagram\.com)[^"]*)"/i);
-            if (dlMatch && dlMatch[1]) {
-              const dlUrl = dlMatch[1];
-              try {
-                const vidRes = await fetch(dlUrl, { signal: AbortSignal.timeout(10000) });
-                if (vidRes.ok) {
-                  const buf = Buffer.from(await vidRes.arrayBuffer());
-                  return {
-                    success: true,
-                    videoUrl: dlUrl,
-                    buffer: buf,
-                    title: "Instagram Video",
-                    quality: "HD Reel",
-                    sourceUrl: clean,
-                    fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
-                  };
-                }
-              } catch {}
-            }
+      if (vidUrl && typeof vidUrl === "string" && vidUrl.startsWith("http")) {
+        try {
+          const dlRes = await fetch(vidUrl, { signal: AbortSignal.timeout(10000) });
+          if (dlRes.ok) {
+            const buf = Buffer.from(await dlRes.arrayBuffer());
+            return {
+              success: true,
+              videoUrl: vidUrl,
+              buffer: buf,
+              title: "Instagram Reel",
+              quality: "HD Reel",
+              sourceUrl: clean,
+              fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
+              isDirectDownloadable: true,
+            };
           }
-        }
+        } catch {}
+
+        return {
+          success: true,
+          videoUrl: vidUrl,
+          title: "Instagram Reel",
+          quality: "HD Reel",
+          sourceUrl: clean,
+          isDirectDownloadable: true,
+        };
       }
     } catch {}
   }
 
   // 6. YouTube or General Search Query
   try {
-    const ytVideo = await searchYoutubeVideo(clean);
-    if (!ytVideo || !ytVideo.videoId) {
+    let title = clean;
+    let videoId = extractYoutubeId(clean) || "";
+    let duration = "HQ Video";
+    let author = "YouTube Creator";
+    let views = "";
+    let thumbnailUrl = "";
+
+    // Fast search via ruhend ytsearch
+    try {
+      // @ts-ignore
+      const { ytsearch } = await import("ruhend-scraper");
+      const searchRes = await ytsearch(clean);
+      if (searchRes && searchRes.video && searchRes.video.length > 0) {
+        const top = searchRes.video[0];
+        title = top.title || title;
+        videoId = top.videoId || videoId;
+        duration = top.duration || top.durationH || duration;
+        author = top.authorName || author;
+        views = top.viewH || top.view || "";
+        thumbnailUrl = top.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+      }
+    } catch {
+      const ytVideo = await searchYoutubeVideo(clean);
+      if (ytVideo && ytVideo.videoId) {
+        videoId = ytVideo.videoId;
+        title = ytVideo.title || title;
+        thumbnailUrl = ytVideo.thumbnailUrl;
+      }
+    }
+
+    if (!videoId) {
       return {
         success: false,
         title: clean,
-        error: `Could not find a video matching "${clean}".`,
+        error: `Could not find any video matching "${clean}".`,
       };
     }
 
-    const videoId = ytVideo.videoId;
-    const title = ytVideo.title || clean;
-
-    // Fast Loader.to for MP4 stream
-    try {
-      const initUrl = `https://loader.to/ajax/download.php?format=360&url=https://www.youtube.com/watch?v=${videoId}`;
-      const initRes = await fetch(initUrl, {
-        headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-        signal: AbortSignal.timeout(4000),
-      });
-
-      if (initRes.ok) {
-        const initData = await initRes.json();
-        if (initData && initData.id) {
-          const progressUrl = initData.progress_url || `https://lto2.affadaffa.com/api/progress?id=${initData.id}`;
-          for (let i = 0; i < 6; i++) {
-            await new Promise((r) => setTimeout(r, 800));
-            try {
-              const progRes = await fetch(progressUrl, {
-                headers: { "User-Agent": USER_AGENT },
-                signal: AbortSignal.timeout(3000),
-              });
-              if (progRes.ok) {
-                const progData = await progRes.json();
-                if (progData.success === 1 && progData.download_url) {
-                  // Pre-fetch buffer for smooth delivery
-                  try {
-                    const vidRes = await fetch(progData.download_url, { signal: AbortSignal.timeout(12000) });
-                    if (vidRes.ok) {
-                      const buf = Buffer.from(await vidRes.arrayBuffer());
-                      return {
-                        success: true,
-                        videoUrl: progData.download_url,
-                        buffer: buf,
-                        title,
-                        quality: "360p / 720p HD",
-                        sourceUrl: `https://www.youtube.com/watch?v=${videoId}`,
-                        fileSizeStr: `${(buf.length / (1024 * 1024)).toFixed(1)} MB`,
-                      };
-                    }
-                  } catch {}
-
-                  return {
-                    success: true,
-                    videoUrl: progData.download_url,
-                    title,
-                    quality: "360p / 720p HD",
-                    sourceUrl: `https://www.youtube.com/watch?v=${videoId}`,
-                    fileSizeStr: "~15-35 MB",
-                  };
-                }
-                if (progData.success === -1) break;
-              }
-            } catch {}
-          }
-        }
-      }
-    } catch (loaderErr: any) {
-      console.warn("[VideoService] Loader.to video error:", loaderErr?.message);
-    }
+    const sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    if (!thumbnailUrl) thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
     return {
       success: true,
-      videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      videoUrl: sourceUrl,
       title,
-      quality: "720p HD",
-      sourceUrl: `https://www.youtube.com/watch?v=${videoId}`,
-      fileSizeStr: "Full HD Video",
+      duration,
+      author,
+      views,
+      thumbnailUrl,
+      quality: "1080p / 720p HD",
+      sourceUrl,
+      isDirectDownloadable: false,
+      fileSizeStr: "HD Stream",
     };
   } catch (err: any) {
     return {

@@ -292,7 +292,7 @@ export async function chatAsYashiHallsAI(params: {
     const apiKey = getApiKey();
     if (!apiKey) {
       return {
-        replyText: `හායි ${params.senderName}! YASHI HALLS AI Engine එක සූදානම් කරමින් පවතී.`,
+        replyText: "",
         action: "none",
         success: false
       };

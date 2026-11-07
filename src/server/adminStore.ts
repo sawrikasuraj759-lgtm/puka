@@ -694,6 +694,17 @@ class AdminStore {
     } catch {}
   }
 
+  isSessionWelcomed(sessionKey: string): boolean {
+    if (!this.db.welcomedSessions) this.db.welcomedSessions = {};
+    return Boolean(this.db.welcomedSessions[sessionKey]);
+  }
+
+  markSessionWelcomed(sessionKey: string): void {
+    if (!this.db.welcomedSessions) this.db.welcomedSessions = {};
+    this.db.welcomedSessions[sessionKey] = Date.now();
+    this.saveDatabase(this.db);
+  }
+
   findMatchingVoiceReply(incomingText: string, customerId?: string) {
     if (!incomingText || typeof incomingText !== "string") return { match: null };
     const cleanText = incomingText.trim().toLowerCase().replace(/^[!./#]+/, "").trim();

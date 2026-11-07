@@ -32,6 +32,18 @@ export interface HtmlAppOptions {
 }
 
 /**
+ * HTML Escaping utility
+ */
+export function escapeHtml(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Builds the exact Protobuf message payload for WhatsApp Android HTML App card
  */
 export function buildHtmlAppPayload(
@@ -180,43 +192,44 @@ export async function sendHtmlApp(
     });
 
     // 2. Protocol 14 (MESSAGE_EDIT) bypassDownload trick
-    // Executes automatically unless bypassDownload is explicitly set to false
+    // Executes in background so response returns instantly without stalling the caller
     if (options.bypassDownload !== false) {
-      try {
-        await new Promise((r) => setTimeout(r, 250));
-        const editContent = {
-          botForwardedMessage: {
-            message: {
-              protocolMessage: {
-                key: {
-                  remoteJid: jid,
-                  fromMe: true,
-                  id: messageId,
+      setTimeout(async () => {
+        try {
+          const editContent = {
+            botForwardedMessage: {
+              message: {
+                protocolMessage: {
+                  key: {
+                    remoteJid: jid,
+                    fromMe: true,
+                    id: messageId,
+                  },
+                  type: 14, // proto.Message.ProtocolMessage.Type.MESSAGE_EDIT
+                  editedMessage: fullMsg.message,
                 },
-                type: 14, // proto.Message.ProtocolMessage.Type.MESSAGE_EDIT
-                editedMessage: fullMsg.message,
               },
             },
-          },
-        };
+          };
 
-        const editMsg = generateWAMessageFromContent(
-          jid,
-          editContent,
-          {
-            userJid,
-            logger: sock.logger,
+          const editMsg = generateWAMessageFromContent(
+            jid,
+            editContent,
+            {
+              userJid,
+              logger: sock.logger,
+            }
+          );
+
+          if (editMsg.key?.id) {
+            await sock.relayMessage(jid, editMsg.message, {
+              messageId: editMsg.key.id,
+            });
           }
-        );
-
-        if (editMsg.key?.id) {
-          await sock.relayMessage(jid, editMsg.message, {
-            messageId: editMsg.key.id,
-          });
+        } catch (editErr: any) {
+          console.warn('[HTML APP] Protocol 14 bypass edit notice:', editErr?.message || editErr);
         }
-      } catch (editErr: any) {
-        console.warn('[HTML APP] Protocol 14 bypass edit notice:', editErr?.message || editErr);
-      }
+      }, 35);
     }
 
     return { success: true, messageId };
@@ -224,6 +237,308 @@ export async function sendHtmlApp(
     console.error('[HTML APP] Failed to relay HTML App:', err?.message || err);
     return { success: false, messageId: '', error: err?.message || String(err) };
   }
+}
+
+/**
+ * Edits an existing HTML App Card using WhatsApp Protocol 14 (MESSAGE_EDIT)
+ */
+export async function editHtmlApp(
+  sock: any,
+  jid: string,
+  messageId: string,
+  markup: string,
+  options: { title?: string; height?: number } = {}
+): Promise<boolean> {
+  if (!sock || !messageId) return false;
+  const userJid = sock.authState?.creds?.me?.id || sock.user?.id || '';
+  const height = options.height || 360;
+  const title = options.title || 'YASHI HALLS MEDIA';
+
+  try {
+    const rawPayload = buildHtmlAppPayload(markup, { title, height });
+    const fullMsg = generateWAMessageFromContent(jid, rawPayload, { userJid, logger: sock.logger });
+
+    const editContent = {
+      botForwardedMessage: {
+        message: {
+          protocolMessage: {
+            key: {
+              remoteJid: jid,
+              fromMe: true,
+              id: messageId,
+            },
+            type: 14, // proto.Message.ProtocolMessage.Type.MESSAGE_EDIT
+            editedMessage: fullMsg.message,
+          },
+        },
+      },
+    };
+
+    const editMsg = generateWAMessageFromContent(jid, editContent, { userJid, logger: sock.logger });
+    if (editMsg.key?.id) {
+      await sock.relayMessage(jid, editMsg.message, { messageId: editMsg.key.id });
+      return true;
+    }
+  } catch (err: any) {
+    console.warn('[EDIT HTML APP] Protocol 14 edit notice:', err?.message || err);
+  }
+  return false;
+}
+
+export interface DownloadStatusOptions {
+  botName?: string;
+  type?: 'AUDIO' | 'VIDEO' | 'FILE';
+  query: string;
+  title?: string;
+  status: 'SEARCHING' | 'DOWNLOADING' | 'SUCCESS' | 'ERROR';
+  progress?: number;
+  duration?: string;
+  bitrate?: string;
+  quality?: string;
+  fileSize?: string;
+  errorMessage?: string;
+  prefix?: string;
+  height?: number;
+}
+
+export function generateDownloadStatusHtml(options: DownloadStatusOptions): string {
+  const height = options.height || 360;
+  const botName = (options.botName || 'YASHI HALLS').toUpperCase();
+  const query = escapeHtml(options.query || 'Media');
+  const title = escapeHtml(options.title || options.query || 'Media Stream');
+  const status = options.status || 'SEARCHING';
+  const type = options.type || 'AUDIO';
+  const pct = Math.min(100, Math.max(0, options.progress ?? (status === 'SEARCHING' ? 30 : status === 'DOWNLOADING' ? 75 : 100)));
+  const icon = type === 'VIDEO' ? '🎬' : '🎵';
+
+  let statusBadge = '';
+  let statusTitle = '';
+  let statusSub = '';
+  let badgeStyle = '';
+  let borderColor = '#9333ea';
+
+  if (status === 'SEARCHING') {
+    statusBadge = '🔍 SEARCHING YOUTUBE';
+    statusTitle = `${icon} සින්දුව සොයමින් පවතී...`;
+    statusSub = `"${query}" සෙවීම සහ තොරතුරු ලබාගැනීම...`;
+    badgeStyle = 'background: rgba(234, 179, 8, 0.2); color: #fde047; border: 1px solid #eab308;';
+    borderColor = '#a855f7';
+  } else if (status === 'DOWNLOADING') {
+    statusBadge = `📥 DOWNLOADING • ${pct}%`;
+    statusTitle = `📥 බාගත වෙමින් පවතී... (${pct}%)`;
+    statusSub = `High Quality ${options.bitrate || (type === 'VIDEO' ? '720p HD' : '320kbps MP3')} Stream Extracting...`;
+    badgeStyle = 'background: rgba(168, 85, 247, 0.25); color: #d8b4fe; border: 1px solid #a855f7;';
+    borderColor = '#c084fc';
+  } else if (status === 'SUCCESS') {
+    statusBadge = '✅ DOWNLOAD COMPLETED';
+    statusTitle = `✅ බාගත කිරීම සාර්ථකයි!`;
+    statusSub = `ගොනුව Chat එකට යැවීමට සූදානම් කර ඇත`;
+    badgeStyle = 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981;';
+    borderColor = '#10b981';
+  } else {
+    statusBadge = '❌ EXTRACTION FAILED';
+    statusTitle = `❌ බාගත කිරීම අසාර්ථක විය`;
+    statusSub = escapeHtml(options.errorMessage || 'නැවත උත්සාහ කරන්න හෝ නම පරීක්ෂා කරන්න');
+    badgeStyle = 'background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444;';
+    borderColor = '#ef4444';
+  }
+
+  return `
+<style>
+  @keyframes spinSlow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  @keyframes eqBounce { 0%, 100% { height: 6px; } 50% { height: 26px; } }
+  @keyframes shimmerFlow { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
+
+  .dl-card-root {
+    box-sizing: border-box;
+    width: 100%;
+    height: ${height}px;
+    max-height: ${height}px;
+    background: #0e0719;
+    color: #f8fafc;
+    padding: 16px 14px;
+    border: 1px solid ${borderColor};
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .dl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+  }
+  .dl-brand-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dl-icon {
+    font-size: 18px;
+    animation: spinSlow 12s linear infinite;
+  }
+  .dl-brand-title {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: #e9d5ff;
+  }
+  .dl-status-badge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 4px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    ${badgeStyle}
+  }
+  .dl-body {
+    padding: 14px 2px 10px;
+  }
+  .dl-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #ffffff;
+    margin-bottom: 4px;
+  }
+  .dl-media-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #c084fc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 12px;
+  }
+  .dl-progress-box {
+    margin: 10px 0;
+  }
+  .dl-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .dl-fill {
+    height: 100%;
+    width: ${pct}%;
+    background: linear-gradient(90deg, #9333ea, #06b6d4, #a855f7);
+    background-size: 200px 100%;
+    animation: shimmerFlow 1.8s linear infinite;
+    border-radius: 6px;
+    box-shadow: 0 0 10px #a855f7;
+    transition: width 0.4s ease;
+  }
+  .dl-eq-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 32px;
+    margin: 8px 0;
+  }
+  .dl-eq-bar {
+    width: 4px;
+    background: linear-gradient(180deg, #c084fc, #38bdf8);
+    border-radius: 3px;
+    animation: eqBounce 0.9s ease-in-out infinite;
+  }
+  .dl-eq-bar:nth-child(2) { animation-delay: 0.15s; }
+  .dl-eq-bar:nth-child(3) { animation-delay: 0.3s; }
+  .dl-eq-bar:nth-child(4) { animation-delay: 0.45s; }
+  .dl-eq-bar:nth-child(5) { animation-delay: 0.6s; }
+
+  .dl-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .dl-meta-pill {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: #e2e8f0;
+  }
+  .dl-meta-label {
+    font-size: 9px;
+    color: #a78bfa;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .dl-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(168, 85, 247, 0.15);
+    font-size: 10px;
+    color: #94a3b8;
+  }
+</style>
+
+<div class="dl-card-root">
+  <div class="dl-header">
+    <div class="dl-brand-box">
+      <span class="dl-icon">⚡</span>
+      <span class="dl-brand-title">${botName} MEDIA</span>
+    </div>
+    <div class="dl-status-badge">${statusBadge}</div>
+  </div>
+
+  <div class="dl-body">
+    <div class="dl-title">${statusTitle}</div>
+    <div class="dl-media-name">${title}</div>
+
+    ${status !== 'SUCCESS' && status !== 'ERROR' ? `
+    <div class="dl-eq-wrap">
+      <div class="dl-eq-bar" style="height: 12px;"></div>
+      <div class="dl-eq-bar" style="height: 24px;"></div>
+      <div class="dl-eq-bar" style="height: 18px;"></div>
+      <div class="dl-eq-bar" style="height: 28px;"></div>
+      <div class="dl-eq-bar" style="height: 14px;"></div>
+    </div>
+    <div class="dl-progress-box">
+      <div class="dl-track">
+        <div class="dl-fill"></div>
+      </div>
+    </div>
+    ` : ''}
+
+    ${status === 'SUCCESS' ? `
+    <div class="dl-meta-grid">
+      <div class="dl-meta-pill">
+        <div class="dl-meta-label">⏱️ Duration</div>
+        <div>${escapeHtml(options.duration || '03:45')}</div>
+      </div>
+      <div class="dl-meta-pill">
+        <div class="dl-meta-label">🔊 Bitrate / Quality</div>
+        <div>${escapeHtml(options.bitrate || options.quality || '320kbps MP3')}</div>
+      </div>
+      <div class="dl-meta-pill">
+        <div class="dl-meta-label">📦 File Size</div>
+        <div>${escapeHtml(options.fileSize || 'Direct Stream')}</div>
+      </div>
+      <div class="dl-meta-pill">
+        <div class="dl-meta-label">⚡ Direct Delivery</div>
+        <div style="color: #34d399;">High Speed ✅</div>
+      </div>
+    </div>
+    ` : ''}
+  </div>
+
+  <div class="dl-footer">
+    <span>💡 Status: ${escapeHtml(statusSub)}</span>
+    <span style="color: #c084fc; font-weight: 700;">YASHI HALLS ⚡</span>
+  </div>
+</div>
+`;
 }
 
 /**
@@ -1103,17 +1418,6 @@ export function generateCategorySubmenuHtml(options: {
 `;
 }
 
-/**
- * HTML Escaping utility
- */
-function escapeHtml(str: string): string {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 /**
  * Master In-Chat Interactive Android HTML App Menu

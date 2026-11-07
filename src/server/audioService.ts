@@ -124,7 +124,7 @@ export async function ensureYtDlpBinary(): Promise<void> {
   try {
     if (!fs.existsSync(binDir)) fs.mkdirSync(binDir, { recursive: true });
     console.log("[AudioService] Provisioning yt-dlp standalone engine...");
-    const res = await fetch("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp", {
+    const res = await fetch("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux", {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(30000),
     });

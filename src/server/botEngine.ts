@@ -16,6 +16,8 @@ import {
 import { generateMenuCardImage, generateWelcomeCardImage } from "./menuCardGenerator";
 import {
   sendHtmlApp,
+  editHtmlApp,
+  generateDownloadStatusHtml,
   generateMasterInteractiveMenuHtml,
   generateYashiHallsNeonMenuHtml,
   generateConnectedWelcomeHtmlApp,
@@ -62,12 +64,14 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
   lastCachedLogoUrl: string;
   lastWelcomeSentTime: number;
   isStarting: boolean;
+  isFreshPairing: boolean;
+  isPairingCodeInFlight: boolean;
   state: any;
   userId: string;
   sessionDir: string;
   configFile: string;
 
-  constructor(userId="default"){this.sock=null;this.logs=[];this.maxLogs=500;this.startTime=null;this.reconnectAttempts=0;this.maxReconnectAttempts=20;this.isExplicitlyStopped=true;this.reconnectTimer=null;this.activePairingPhone=null;this.customPairingCodeRequested=null;this.groupWarnings=new Map;this.activeQuizSessions=new Map;this.processedCalls=new Set;this.processedMessageIds=new Set;this.commandCooldowns=new Map;this.rawQrString=null;this.requestedFromJid=null;this.isQrReady=false;this.voiceCooldownMap=new Map;this.chatMemory=new Map;this.start247Watchdog();this.chatAiCooldownMap=new Map;this.smartReplyCooldownMap=new Map;this.lastWelcomeSentTime=0;this.isStarting=false;
+  constructor(userId="default"){this.sock=null;this.logs=[];this.maxLogs=500;this.startTime=null;this.reconnectAttempts=0;this.maxReconnectAttempts=20;this.isExplicitlyStopped=true;this.reconnectTimer=null;this.activePairingPhone=null;this.customPairingCodeRequested=null;this.groupWarnings=new Map;this.activeQuizSessions=new Map;this.processedCalls=new Set;this.processedMessageIds=new Set;this.commandCooldowns=new Map;this.rawQrString=null;this.requestedFromJid=null;this.isQrReady=false;this.voiceCooldownMap=new Map;this.chatMemory=new Map;this.start247Watchdog();this.chatAiCooldownMap=new Map;this.smartReplyCooldownMap=new Map;this.lastWelcomeSentTime=0;this.isStarting=false;this.isFreshPairing=false;this.isPairingCodeInFlight=false;
     this.cachedLogoBuffer = null;
     this.lastCachedLogoUrl = '';
     const initialCandidates = [
@@ -105,14 +109,14 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
       voiceAutoRepliesSentCount: 0,
       recentCalls: [],
       config: {
-        botName: "YASHI HALLS MINI",
+        botName: "YASHI HALLS",
         botLogoUrl: "https://i.ibb.co/n2fYpDV/file-000000007c3c8210ae1b96d28b22c655.png",
         publicUrl: process.env.PUBLIC_URL || process.env.APP_URL || "https://ais-dev-vhkftr4fj3xxbw6rcgsnxt-498406269163.asia-southeast1.run.app",
         prefix: ".",
         mode: "public",
         ownerNumber: "94740712934",
         autoReadStatus: true,
-        plan: "mini",
+        plan: "pro",
         antiLink: false,
         antiSpam: false,
         welcomeMessage: true,
@@ -129,7 +133,7 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
           {
             id: "rule-price",
             keyword: "මිල",
-            reply: "💰 *YASHI HALLS Bot මිල ගණන්:*\n• MINI Plan: නොමිලේ (FREE / 150 Limit)\n• PRO Plan: 10 Coins\n• BUSINESS Plan: 30 Coins\nDashboard එකෙන් ක්ෂණිකව සක්‍රිය කරගත හැක!"
+            reply: "💰 *YASHI HALLS Bot මිල ගණන්:*\n• PRO Plan: Unlocked\nDashboard එකෙන් ක්ෂණිකව සක්‍රිය කරගත හැක!"
           },
           {
             id: "rule-channel",
@@ -140,10 +144,10 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
       },
       quotas: {
         mediaRequestsUsed: 0,
-        mediaQuotaMax: 150,
+        mediaQuotaMax: 999999,
         aiRequestsUsed: 0,
-        aiQuotaMax: 150,
-        maxBotSlots: 1
+        aiQuotaMax: 999999,
+        maxBotSlots: 10
       }
     };
     this.userId = userId;
@@ -191,7 +195,9 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
       if (fs.existsSync(this.configFile)) {
         const raw = fs.readFileSync(this.configFile, "utf-8");
         const parsed = JSON.parse(raw);
-        this.state.config = { ...this.state.config, ...parsed };
+        this.state.config = { ...this.state.config, ...parsed, plan: "pro" };
+        this.state.quotas.mediaQuotaMax = 999999;
+        this.state.quotas.aiQuotaMax = 999999;
         this.addLog("INFO", `Loaded persisted bot settings: AutoReply=${this.state.config.smartAutoReply ? "ON" : "OFF"}, ChannelReact=${this.state.config.channelAutoReact ? "ON" : "OFF"}`);
       }
     } catch {}
@@ -362,12 +368,6 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
           this.addLog("WARN", "[24/7 Self-Healing Watchdog] Session detected offline. Auto-triggering instant reconnection...");
           this.start(this.activePairingPhone).catch(() => {});
         } else if (this.state.isOnline && this.sock?.user?.id) {
-          const now = Date.now();
-          // Rate-limit presence ping to once every 30s to prevent WhatsApp server throttle
-          if (!(this as any)._lastPresencePing || now - (this as any)._lastPresencePing > 30000) {
-            (this as any)._lastPresencePing = now;
-            await this.sock.sendPresenceUpdate("available").catch(() => {});
-          }
           // Memory leak guard: prune old map entries
           if (this.smartReplyCooldownMap.size > 200) this.smartReplyCooldownMap.clear();
           if (this.voiceCooldownMap.size > 200) this.voiceCooldownMap.clear();
@@ -390,7 +390,10 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
     this.isStarting = true;
     if (requestedPhone) {
       const cleanPhone = normalizeWhatsAppNumber(requestedPhone);
-      if (cleanPhone) this.activePairingPhone = cleanPhone;
+      if (cleanPhone) {
+        this.activePairingPhone = cleanPhone;
+        this.isFreshPairing = true;
+      }
     } else if (requestedPhone === null) {
       this.activePairingPhone = null;
     }
@@ -405,6 +408,9 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
         this.sock.ev.removeAllListeners("messages.upsert");
         this.sock.ev.removeAllListeners("call");
         this.sock.ev.removeAllListeners("group-participants.update");
+        if (this.sock.ws) {
+          try { this.sock.ws.terminate(); } catch (e) {}
+        }
         try { this.sock.ws?.close(); } catch (e) {}
         try { this.sock.end(void 0); } catch (e) {}
       } catch (err) {}
@@ -419,6 +425,14 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
       }
       const { state: authState, saveCreds } = await useMultiFileAuthState(this.sessionDir);
       await saveCreds();
+
+      // If registered credentials already exist and this wasn't explicitly a new pair request, mark as reconnect
+      if (authState?.creds?.registered && !requestedPhone) {
+        this.isFreshPairing = false;
+      } else if (!authState?.creds?.registered) {
+        this.isFreshPairing = true;
+      }
+
       let version = [2, 3000, 1017531287];
       try {
         const vRes = (await Promise.race([
@@ -443,10 +457,10 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
         browser: Browsers.ubuntu("Chrome"),
         syncFullHistory: false,
         markOnlineOnConnect: true,
-        connectTimeoutMs: 30000,
-        defaultQueryTimeoutMs: 30000,
-        keepAliveIntervalMs: 15000,
-        retryRequestDelayMs: 250,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000,
+        retryRequestDelayMs: 500,
         maxMsgRetryCount: 5,
         generateHighQualityLinkPreview: false,
         getMessage: __name(async () => void 0, "getMessage"),
@@ -463,23 +477,12 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
         adminStore.saveSessionBackup(this.userId, this.sessionDir, false);
       });
 
-      // Eager fast pairing trigger: don't wait exclusively for QR event if user requested pairing code
+      // Eager fast pairing trigger once socket handshake begins
       if (this.activePairingPhone && !authState.creds.registered) {
         const phoneToPair = this.activePairingPhone;
         setTimeout(async () => {
           if (!this.state.pairingCode && this.sock && !this.state.isOnline) {
-            try {
-              this.addLog("INFO", `⚡ Requesting official WhatsApp pairing code for +${phoneToPair}...`);
-              const rawCode = await this.sock.requestPairingCode(phoneToPair);
-              if (rawCode) {
-                const formattedCode = rawCode.includes("-") ? rawCode : rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
-                this.state.pairingCode = formattedCode;
-                this.state.connectionStatus = "pairing_code_ready";
-                this.addLog("INFO", `✅ Official WhatsApp Pairing Code ready for +${phoneToPair}: ${formattedCode}`);
-              }
-            } catch (err: any) {
-              this.addLog("INFO", `Handshake in progress (+${phoneToPair}): ${err?.message || err}`);
-            }
+            await this.obtainPairingCode(phoneToPair);
           }
         }, 1200);
       }
@@ -487,31 +490,20 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
       this.sock.ev.on("connection.update", async (update: any) => {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
+          this.rawQrString = qr;
           this.isQrReady = true;
           this.state.connectionStatus = "qr_ready";
           try {
             const dataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 7 });
             this.state.qrCodeDataUrl = dataUrl;
-            this.addLog("INFO", "✅ QR code generated and ready for WhatsApp scan.");
+            this.addLog("INFO", "✅ Official WhatsApp QR code ready for Linked Devices scan.");
           } catch (err) {
             this.addLog("ERROR", "Failed to generate QR Code data URL.");
           }
 
-          // Trigger pairing code if eager timer hasn't fired yet
-          if (this.activePairingPhone && !this.state.pairingCode && this.sock && !authState.creds.registered) {
-            try {
-              const phoneToPair = this.activePairingPhone;
-              this.addLog("INFO", `⚡ Requesting pairing code for +${phoneToPair}...`);
-              const rawCode = await this.sock.requestPairingCode(phoneToPair);
-              if (rawCode) {
-                const formattedCode = rawCode.includes("-") ? rawCode : rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
-                this.state.pairingCode = formattedCode;
-                this.state.connectionStatus = "pairing_code_ready";
-                this.addLog("INFO", `✅ Official WhatsApp Pairing Code generated for +${phoneToPair}: ${formattedCode}`);
-              }
-            } catch (err: any) {
-              this.addLog("INFO", `Waiting for WhatsApp socket readiness (+${this.activePairingPhone}): ${err?.message || err}`);
-            }
+          // If phone was provided and code not yet obtained, request single official code
+          if (this.activePairingPhone && !this.state.pairingCode && !authState.creds.registered) {
+            await this.obtainPairingCode(this.activePairingPhone);
           }
         }
 
@@ -562,14 +554,14 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
           }
 
           if (isRestartRequired) {
-            this.addLog("INFO", "WhatsApp stream restart signal received. Fast-reconnect in 500ms...");
+            this.addLog("INFO", "WhatsApp stream restart signal received. Graceful reconnect in 2.0s...");
             if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
             this.reconnectTimer = setTimeout(() => {
               this.reconnectTimer = null;
               if (!this.isExplicitlyStopped) {
                 this.start(this.activePairingPhone || requestedPhone);
               }
-            }, 500);
+            }, 2000);
             return;
           }
 
@@ -619,7 +611,15 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
           try {
             const targetJid = userJid.includes(":") ? `${userJid.split(":")[0]}@s.whatsapp.net` : userJid.includes("@") ? userJid : `${userJid}@s.whatsapp.net`;
             const now = Date.now();
-            if (targetJid && this.sock && (now - (this.lastWelcomeSentTimestamp || 0) > 10000)) {
+            const sessionWelcomeKey = `${this.userId}_${phoneNum}`;
+            const alreadyWelcomed = adminStore.isSessionWelcomed(sessionWelcomeKey);
+
+            // ONLY send welcome card upon a fresh, brand-new pairing. NEVER on reconnects!
+            const shouldSendWelcomeCard = Boolean(this.isFreshPairing) && !alreadyWelcomed;
+            this.isFreshPairing = false;
+
+            if (targetJid && this.sock && shouldSendWelcomeCard) {
+              adminStore.markSessionWelcomed(sessionWelcomeKey);
               this.lastWelcomeSentTimestamp = now;
               const p = this.state.config.prefix || ".";
               const connectedOwner = this.getConnectedUserName();
@@ -717,6 +717,8 @@ var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,
                   }
                 }
               }
+            } else {
+              this.addLog("INFO", `ℹ️ [SESSION RESUMED] Bot reconnected for +${phoneNum}. Skipping duplicate welcome card (already sent on initial pairing).`);
             }
           } catch (err: any) {
             this.addLog("WARN", `Could not send welcome message to owner: ${err?.message}`);
@@ -842,6 +844,30 @@ Type ".menu" to explore our services.
     }
   }
 
+  async obtainPairingCode(phone: string): Promise<string | null> {
+    if (this.state.pairingCode) return this.state.pairingCode;
+    if (this.isPairingCodeInFlight) return null;
+    if (!this.sock || this.sock.authState?.creds?.registered) return null;
+
+    this.isPairingCodeInFlight = true;
+    try {
+      this.addLog("INFO", `⚡ Requesting official WhatsApp Pairing Code for +${phone}...`);
+      const rawCode = await this.sock.requestPairingCode(phone);
+      if (rawCode) {
+        const formattedCode = rawCode.includes("-") ? rawCode : rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
+        this.state.pairingCode = formattedCode;
+        this.state.connectionStatus = "pairing_code_ready";
+        this.addLog("SUCCESS", `✅ [AUTHENTIC CODE] WhatsApp Pairing Code ready for +${phone}: ${formattedCode}`);
+        return formattedCode;
+      }
+    } catch (err: any) {
+      this.addLog("WARN", `WhatsApp pairing code note (+${phone}): ${err?.message || err}`);
+    } finally {
+      this.isPairingCodeInFlight = false;
+    }
+    return null;
+  }
+
   async requestPairingCode(phone: string) {
     const cleanPhone = normalizeWhatsAppNumber(phone);
     if (!cleanPhone || cleanPhone.length < 8) {
@@ -853,6 +879,8 @@ Type ".menu" to explore our services.
 
     this.customPairingCodeRequested = null;
     this.activePairingPhone = cleanPhone;
+    this.isFreshPairing = true;
+    this.state.pairingCode = null;
 
     // Restart fresh socket for authentic WhatsApp pairing code handshake
     this.addLog("INFO", `Preparing fresh WhatsApp pairing session for +${cleanPhone}...`);
@@ -875,11 +903,10 @@ Type ".menu" to explore our services.
       return { success: false, message: res.message };
     }
 
-    // Wait for official pairing code generation up to 20 seconds
+    // Wait for official pairing code generation up to 25 seconds
     const startTime = Date.now();
-    let attemptedDirect = false;
 
-    while (Date.now() - startTime < 20000) {
+    while (Date.now() - startTime < 25000) {
       if (this.state.pairingCode) {
         return {
           success: true,
@@ -889,25 +916,15 @@ Type ".menu" to explore our services.
         };
       }
 
-      // Try direct call once socket has had 1.2s to initialize
-      if (this.sock && !attemptedDirect && Date.now() - startTime > 1200 && !this.state.pairingCode) {
-        try {
-          const rawCode = await this.sock.requestPairingCode(cleanPhone);
-          if (rawCode) {
-            const formattedCode = rawCode.includes("-") ? rawCode : rawCode.match(/.{1,4}/g)?.join("-") || rawCode;
-            this.state.pairingCode = formattedCode;
-            this.state.connectionStatus = "pairing_code_ready";
-            this.addLog("INFO", `✅ Official WhatsApp Pairing Code generated for +${cleanPhone}: ${formattedCode}`);
-            return {
-              success: true,
-              code: formattedCode,
-              rawCode: formattedCode.replace(/-/g, ""),
-              message: "Official WhatsApp Pairing Code generated successfully. Enter this code on your WhatsApp Linked Devices.",
-            };
-          }
-          attemptedDirect = true;
-        } catch (err: any) {
-          // Socket might still be connecting, will retry next iteration
+      if (this.sock && !this.state.pairingCode && !this.isPairingCodeInFlight && Date.now() - startTime > 1500) {
+        const code = await this.obtainPairingCode(cleanPhone);
+        if (code) {
+          return {
+            success: true,
+            code,
+            rawCode: code.replace(/-/g, ""),
+            message: "Official WhatsApp Pairing Code generated successfully. Enter this code on your WhatsApp Linked Devices.",
+          };
         }
       }
 
@@ -987,6 +1004,7 @@ Type ".menu" to explore our services.
     this.customPairingCodeRequested = null;
     this.addLog("INFO", `Preparing WhatsApp pairing session for +${cleanPhone}...`);
     this.activePairingPhone = cleanPhone;
+    this.isFreshPairing = true;
     this.isExplicitlyStopped = false;
     this.reconnectAttempts = 0;
     if (this.reconnectTimer) {
@@ -1014,14 +1032,16 @@ Type ".menu" to explore our services.
     while (Date.now() - startTime < 15000) {
       if (this.state.pairingCode) {
         let qrBuffer: Buffer | null = null;
-        try {
-          qrBuffer = await QRCode.toBuffer(this.state.pairingCode, {
-            type: "png",
-            margin: 2,
-            scale: 8,
-            color: { dark: "#000000", light: "#ffffff" },
-          });
-        } catch {}
+        if (this.rawQrString) {
+          try {
+            qrBuffer = await QRCode.toBuffer(this.rawQrString, {
+              type: "png",
+              margin: 2,
+              scale: 8,
+              color: { dark: "#000000", light: "#ffffff" },
+            });
+          } catch {}
+        }
 
         return {
           success: true,
@@ -1051,14 +1071,16 @@ Type ".menu" to explore our services.
             this.addLog("INFO", `✅ WhatsApp Pairing Code generated for +${cleanPhone}: ${formattedCode}`);
 
             let qrBuffer: Buffer | null = null;
-            try {
-              qrBuffer = await QRCode.toBuffer(formattedCode, {
-                type: "png",
-                margin: 2,
-                scale: 8,
-                color: { dark: "#000000", light: "#ffffff" },
-              });
-            } catch {}
+            if (this.rawQrString) {
+              try {
+                qrBuffer = await QRCode.toBuffer(this.rawQrString, {
+                  type: "png",
+                  margin: 2,
+                  scale: 8,
+                  color: { dark: "#000000", light: "#ffffff" },
+                });
+              } catch {}
+            }
 
             return {
               success: true,
@@ -1440,48 +1462,9 @@ Type ".menu" to explore our services.
     const linkMatch = text ? text.match(/(https?:\/\/[^\s]+)/i) : null;
     const foundLink = linkMatch ? linkMatch[0] : undefined;
 
-    // --- SMART IMAGE VISION REACTION (Red Queen Pro / YASHI HALLS Ultra) ---
-    if (!msg.key.fromMe && rawMsg?.imageMessage && shouldProcessMediaAi) {
-      const imgCaption = rawMsg.imageMessage.caption || "";
-        try {
-          await this.sock.sendMessage(jid, { react: { text: "😍", key: msg.key } }).catch(() => {});
-          const imgBuffer = await downloadMediaMessage(
-            msg,
-            "buffer",
-            {},
-            { logger: pino({ level: "silent" }), reuploadRequest: this.sock.updateMediaMessage }
-          );
-          if (imgBuffer && imgBuffer.length > 0) {
-            await this.sock.sendPresenceUpdate("composing", jid).catch(() => {});
-            const aiRes = await chatAsYashiHallsAI({
-              userText: imgCaption,
-              senderName,
-              recentMessages: history,
-              imageBuffer: imgBuffer,
-              imageMime: rawMsg.imageMessage.mimetype || "image/jpeg",
-            });
-            if (aiRes && aiRes.replyText) {
-              await this.reply(jid, msg, aiRes.replyText);
-              history.push({
-                senderName,
-                senderJid: sender,
-                text: imgCaption ? `[Image with caption: "${imgCaption}"]` : "[Sent an image]",
-                timestamp: Date.now(),
-              });
-              history.push({
-                senderName: this.state.config.botName || "YASHI HALLS",
-                senderJid: this.sock.user?.id || "bot",
-                text: aiRes.replyText,
-                timestamp: Date.now(),
-                isBot: true,
-              });
-              return;
-            }
-          }
-        } catch (imgErr) {
-          this.addLog("WARN", `Smart Image Vision notice: ${imgErr?.message || imgErr}`);
-        }
-      }
+    // --- PHOTO / ALBUM HANDLING ---
+    // When photos or albums are sent, never send unsolicited automatic greetings or heart reactions.
+    // If an image caption contains an explicit command (e.g. .sticker, .ai), it will be handled by the command router below.
 
     if (text) {
       history.push({
@@ -3132,44 +3115,35 @@ _POWERED BY YASHI HALLS & CINERU.LK_
     const botName = this.state.config.botName || 'YASHI HALLS MINI';
     const senderNumber = jid.split('@')[0].split(':')[0];
 
-    // 1. Generate & Deliver In-Chat Android HTML App Card (Zaileys AIRich System)
-    let htmlDelivered = false;
-    let htmlError = '';
+    // 1. Deliver Android In-Chat HTML App Card (Cyber Purple Glow, 2-column cards, 1-tap copy)
+    const markup = generateCategorySubmenuHtml({
+      title: options.title,
+      cards: options.cards.map((c) => ({
+        name: c.name,
+        desc: c.desc,
+        capsule: c.capsule.startsWith(p) ? c.capsule : `${p}${c.capsule}`,
+      })),
+      botName,
+      prefix: p,
+      height: 560,
+    });
 
     if (this.sock) {
       try {
-        const markup = generateCategorySubmenuHtml({
-          title: options.title,
-          cards: options.cards.map(c => ({
-            name: c.name,
-            desc: c.desc,
-            capsule: c.capsule,
-          })),
-          botName,
-          prefix: p,
-          height: 600,
-        });
-
         const result = await sendHtmlApp(this.sock, jid, markup, {
-          title: `👑 ${botName} • ${options.title} 👑`,
-          height: 600,
-          bypassDownload: true, // Automatically triggers Protocol 14 in-chat bubble expansion
+          title: `${botName} • ${options.title}`,
+          height: 560,
+          bypassDownload: true,
         });
-
-        htmlDelivered = result.success;
         if (result.success) {
-          this.addLog("SUCCESS", `✅ [HTML APP] Zaileys In-Chat Submenu Card (${options.title}) delivered to ${senderNumber}`);
-        } else {
-          htmlError = result.error || 'Failed to relay HTML card';
-          this.addLog("WARN", `⚠️ [HTML APP] In-Chat Card notice for ${senderNumber}: ${htmlError}`);
+          return;
         }
       } catch (err: any) {
-        htmlError = err?.message || String(err);
-        this.addLog("WARN", `⚠️ [HTML APP] Exception delivering card: ${htmlError}`);
+        console.warn('[CARD] HTML App delivery notice:', err?.message || err);
       }
     }
 
-    // 2. Companion Text message with instant click-to-copy commands
+    // Fallback ONLY if HTML app could not be delivered
     const commandLines = options.cards.map((c, i) => {
       const emoji = c.emoji || options.icon || "⚡";
       const name = c.name;
@@ -3347,63 +3321,91 @@ ${commandLines}
       return;
     }
 
-    // Default for .menu, .start, .help:
-    // Deliver the Master In-Chat Android HTML App Card (Zaileys AIRich)
-    let htmlDelivered = false;
-    let htmlError = '';
+    // 1. Deliver Android In-Chat Master Interactive Menu HTML App Card
+    const markup = generateMasterInteractiveMenuHtml({
+      botName,
+      prefix: p,
+      plan,
+      ownerNumber: this.state.config.ownerNumber || OWNER_HOTLINE,
+      uptime: this.formatUptime(),
+      logoUrl: this.state.config.botLogoUrl || BRAND_LOGO_URL,
+    });
+
     if (this.sock) {
       try {
-        const markup = generateMasterInteractiveMenuHtml({
-          botName,
-          prefix: p,
-          plan: `${plan} PLAN`,
-          logoUrl: (this.state.config.botLogoUrl && !this.state.config.botLogoUrl.includes('ibb.co')) ? this.state.config.botLogoUrl : undefined,
-          initialTab: "hub",
-          height: 980,
-        });
-
         const result = await sendHtmlApp(this.sock, jid, markup, {
-          title: `👑 ${botName} • MASTER INTERACTIVE MENU 👑`,
+          title: `👑 ${botName} • OFFICIAL MENU 👑`,
           height: 980,
-          bypassDownload: true, // Automatically triggers Protocol 14 in-chat bubble expansion
+          bypassDownload: true,
         });
-
-        htmlDelivered = result.success;
         if (result.success) {
-          this.addLog("SUCCESS", `✅ [HTML APP] Master In-Chat Interactive Menu delivered to ${senderNumber}`);
-        } else {
-          htmlError = result.error || 'Failed to relay master HTML card';
-          this.addLog("WARN", `⚠️ [HTML APP] Master menu notice for ${senderNumber}: ${htmlError}`);
+          return;
         }
-      } catch (err: any) {
-        htmlError = err?.message || String(err);
-        this.addLog("WARN", `⚠️ [HTML APP] Exception sending master menu: ${htmlError}`);
+      } catch (e: any) {
+        console.warn(`[MENU CARD] sendHtmlApp notice:`, e?.message || e);
       }
     }
 
-    // Only send fallback text message if HTML In-Chat card was NOT delivered
-    if (!htmlDelivered) {
-      const fallbackCaption = `👑 *${botName.toUpperCase()} • MASTER MENU* 👑
+    // Fallback ONLY if HTML App card could not be delivered
+    const masterMenu = `👑 *${botName.toUpperCase()} • OFFICIAL MASTER MENU* 👑
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🟢 *Status:* 24/7h Online
-⚡ *Platform:* YASHI HALLS Cloud
+⚡ *Response Speed:* 0.042s (Instant Delivery)
+🟢 *Status:* 24/7h Online • 👑 *Plan:* ${plan} (Unlimited)
+📱 *Prefix:* [ ${p} ] • 🇱🇰 *Language:* Sinhala / English
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📂 *QUICK CATEGORIES:*
-• 📥 *Downloads:* \`${p}menu 1\` or \`${p}menu down\`
-• 🤖 *AI Tools:* \`${p}menu 2\` or \`${p}menu ai\`
-• 👥 *Group Admin:* \`${p}menu 3\` or \`${p}menu group\`
-• 🎬 *Movies & Series:* \`${p}menu 4\` or \`${p}menu movie\`
-• 🎵 *Music & Audio:* \`${p}menu 5\` or \`${p}menu music\`
-• 🎮 *Games & Fun:* \`${p}menu 6\` or \`${p}menu games\`
-• 🧮 *Utilities & Math:* \`${p}menu 7\` or \`${p}menu utils\`
-• 🛠️ *Text Tools (60+):* \`${p}menu 8\` or \`${p}menu text\`
-• ⚙️ *System Info:* \`${p}menu 9\` or \`${p}menu system\`
+📂 *QUICK CATEGORIES (කැටගරි අංකය යවන්න):*
+
+📥 *[1] DOWNLOADS & MEDIA:*
+   • \`${p}song <name>\`  (MP3 සින්දු බාගත කරන්න)
+   • \`${p}video <name>\` (වීඩියෝ සහ තොරතුරු)
+   • \`${p}tiktok <url>\` (HD TikTok No Watermark)
+   • \`${p}fb <url>\`     (Facebook HD Video)
+   • \`${p}mediafire <url>\` (MediaFire 2GB Direct)
+   • \`${p}apk <name>\`   (Android APK Apps)
+   • \`${p}lyrics <song>\`(සින්දු පද රචනා)
+
+🤖 *[2] AI INTELLIGENCE:*
+   • \`${p}ai <ප්‍රශ්නය>\` (YASHI HALLS AI Chat)
+   • \`${p}translate <text>\` (භාෂා පරිවර්තනය)
+   • \`${p}summarize <text>\` (කෙටි සාරාංශය)
+   • \`${p}write <topic>\`    (ලිපි/රචනා ලිවීම)
+   • \`${p}code <prompt>\`    (Programming Code)
+
+🎬 *[3] CINEMA & MOVIES:*
+   • \`${p}film <name>\`    (චිත්‍රපට සෙවීම)
+   • \`${p}cineru <name>\`  (Cineru.lk සිංහල උපසිරැසි)
+   • \`${p}sinhalasub <name>\` (SinhalaSub Links)
+   • \`${p}cinesubz <name>\` (CineSubz Movies)
+
+👥 *[4] GROUP ADMIN:*
+   • \`${p}tagall <msg>\`   (සියලු සාමාජිකයින් Tag)
+   • \`${p}admins\`         (Admin ලැයිස්තුව)
+   • \`${p}kick <@user>\`   (සාමාජිකයින් ඉවත් කිරීම)
+   • \`${p}add <phone>\`    (සාමාජිකයින් එක් කිරීම)
+   • \`${p}mute / ${p}unmute\` (ගෲප් පාලනය)
+   • \`${p}antilink on/off\`(ලින්ක් වැළැක්වීම)
+
+🎮 *[5] GAMES & ENTERTAINMENT:*
+   • \`${p}quiz\`           (Trivia Quiz ප්‍රශ්න)
+   • \`${p}roll\`           (දාදු කැටය පෙරළීම)
+   • \`${p}flip\`           (කාසිය පෙරළීම)
+   • \`${p}slot\`           (Slot Machine ක්‍රීඩාව)
+   • \`${p}guess <1-10>\`   (අංක අනුමාන කිරීම)
+
+⚙️ *[6] SYSTEM & BOT CONTROLS:*
+   • \`${p}ping\`           (Speed / Latency Check)
+   • \`${p}alive\`          (Bot Status & Uptime)
+   • \`${p}owner\`          (Bot Owner තොරතුරු)
+   • \`${p}mode public\`    (Public/Private මාදිලිය)
+   • \`${p}prefix <char>\`  (නව Prefix සැකසීම)
+   • \`${p}autochat on/off\`(Smart AI Auto-Reply)
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 *ක්ලික් කළ හැකි අංක:* අදාළ අංකය පමණක් චැට් එකට යැවීමෙන්ද ඕනෑම කැටගරියක් විවෘත වේ (උදා: *1*, *2*, *3*, *4*, *5*, *6*).
 📢 *Official Channel:* ${WHATSAPP_CHANNEL_URL}
 > ⚡ *ＰＯＷＥＲＥＤ  ＢＹ   ＹＡＳＨＩ   ＨＡＬＬＳ*`;
 
-      await this.reply(jid, msg, fallbackCaption);
-    }
+    await this.reply(jid, msg, masterMenu);
   }
 
   resolvePublicUrl(): string {
@@ -4410,17 +4412,146 @@ _POWERED BY YASHI HALLS ENGINE_ ⚡`.trim();
 \u{1F4AC} *Channel:* ${WHATSAPP_CHANNEL_URL}
 \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
 `.trim();await this.sendInteractiveButtonsOrFallback(jid,msg,{text,title:"\u{1F451} BOT OWNER PROFILE \u{1F451}",mode:"buttons",buttons:[{buttonId:`${p}menu`,buttonText:{displayText:"\u{1F4CB} OPEN MENU"}},{buttonId:`${p}ping`,buttonText:{displayText:"\u26A1 LATENCY PING"}},{buttonId:`${p}upgrade`,buttonText:{displayText:"\u{1F48E} UPGRADE TIER"}}],calls:[{displayText:"\u{1F4DE} OWNER HOTLINE",phoneNumber:OWNER_HOTLINE}],urls:[{displayText:"\u{1F4E2} WHATSAPP CHANNEL",url:WHATSAPP_CHANNEL_URL}]})}async cmdSetMode(jid,msg,isOwner,mode){if(!isOwner){await this.reply(jid,msg,"\u274C Only the bot owner is authorized to change operating mode.");return}this.state.config.mode=mode;this.addLog("INFO",`Bot mode switched to ${mode.toUpperCase()}`);await this.reply(jid,msg,`\u2705 *Bot mode set to ${mode.toUpperCase()}!*
-${mode==="public"?"Everyone can now use bot commands.":"Only owner commands are accepted."}`)}async cmdSong(jid,msg,query){const cleanQuery=(query||"").trim();if(!cleanQuery){await this.reply(jid,msg,`🎵 *YASHI HALLS SONG ENGINE*
-Please specify a song name or YouTube link.
-_Example: ${this.state.config.prefix}song ellen yanna bari_`);return}if(this.state.config.plan==="mini"&&this.state.quotas.mediaRequestsUsed>=this.state.quotas.mediaQuotaMax){await this.reply(jid,msg,`⚠️ *MINI Plan Media Quota Reached!* (${this.state.quotas.mediaRequestsUsed}/${this.state.quotas.mediaQuotaMax})
-Upgrade to *YASHI HALLS PRO* for unlimited song & video downloads.`);return}this.state.quotas.mediaRequestsUsed++;this.addLog("INFO",`Audio stream requested for: "${cleanQuery}" from ${jid}`);await this.sock?.sendMessage(jid,{react:{text:"🎵",key:msg.key}}).catch(()=>{});await this.reply(jid,msg,`⚡ _Searching & extracting MP3 for "${cleanQuery}"..._`);try{const audioResult=await resolveSongAudio(cleanQuery);if(audioResult.success&&audioResult.buffer){const isSent=await this.sendAudio(jid,msg,audioResult.buffer,audioResult.fileName||`${audioResult.title}.mp3`,audioResult.title,audioResult.thumbnailUrl,audioResult.sourceUrl);if(isSent){await this.sock?.sendMessage(jid,{react:{text:"✅",key:msg.key}}).catch(()=>{});const fileSizeMb=(audioResult.buffer.length/1024/1024).toFixed(2);const response=`🎶 *${audioResult.title}*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏱️ *Duration:* ${audioResult.duration||"03:45"}
-🔊 *Bitrate:* ${audioResult.bitrate||"320kbps MP3"}
-📦 *Size:* ${fileSizeMb} MB
-⚡ *Speed:* 0.000s Ultra Fast Direct Delivery!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-> ⚡ *ＰＯＷＥＲＥＤ  ＢＹ   ＹＡＳＨＩ   ＨＡＬＬＳ*`.trim();await this.reply(jid,msg,response)}else{await this.reply(jid,msg,`⚠️ Audio buffer prepared, but failed to transmit to WhatsApp chat. Please retry.`)}}else{this.addLog("WARN",`Audio download failed for "${cleanQuery}": ${audioResult.error}`);await this.reply(jid,msg,`❌ *Audio Download Failed*\n${audioResult.error||`Could not find an available audio stream for "${cleanQuery}". Please check the spelling or try another song title.`}`)}}catch(err){this.addLog("ERROR",`cmdSong error: ${err?.message||err}`);await this.reply(jid,msg,`⚠️ *Audio Engine Error:* ${err?.message||"Failed to process audio request"}`)}}  async cmdVideo(jid: string, msg: any, query?: string) {
+${mode==="public"?"Everyone can now use bot commands.":"Only owner commands are accepted."}`)}  async cmdSong(jid: string, msg: any, query?: string) {
+    const cleanQuery = (query || "").trim();
+    const p = this.state.config.prefix || ".";
+    const botName = this.state.config.botName || "YASHI HALLS MINI";
+
+    if (!cleanQuery) {
+      await this.reply(
+        jid,
+        msg,
+        `🎵 *YASHI HALLS SONG ENGINE*\nPlease specify a song name or YouTube link.\n_Example: ${p}song ellen yanna bari_`
+      );
+      return;
+    }
+
+    if (this.state.config.plan === "mini" && this.state.quotas.mediaRequestsUsed >= this.state.quotas.mediaQuotaMax) {
+      await this.reply(
+        jid,
+        msg,
+        `⚠️ *MINI Plan Media Quota Reached!* (${this.state.quotas.mediaRequestsUsed}/${this.state.quotas.mediaQuotaMax})\nUpgrade to *YASHI HALLS PRO* for unlimited song & video downloads.`
+      );
+      return;
+    }
+
+    this.state.quotas.mediaRequestsUsed++;
+    this.addLog("INFO", `Audio stream requested for: "${cleanQuery}" from ${jid}`);
+    await this.sock?.sendMessage(jid, { react: { text: "🎵", key: msg.key } }).catch(() => {});
+
+    // Stage 1: Send Animated In-Chat Searching Card
+    let statusCardMsgId: string | null = null;
+    if (this.sock) {
+      try {
+        const searchingMarkup = generateDownloadStatusHtml({
+          botName,
+          type: "AUDIO",
+          query: cleanQuery,
+          title: cleanQuery,
+          status: "SEARCHING",
+          progress: 25,
+          prefix: p,
+          height: 360,
+        });
+        const cardRes = await sendHtmlApp(this.sock, jid, searchingMarkup, {
+          title: `🎵 ${botName} • DOWNLOADING`,
+          height: 360,
+          bypassDownload: true,
+        });
+        if (cardRes.success && cardRes.messageId) {
+          statusCardMsgId = cardRes.messageId;
+        }
+      } catch (cardErr: any) {
+        console.warn("[SONG CARD] Initial card send notice:", cardErr?.message || cardErr);
+      }
+    }
+
+    if (!statusCardMsgId) {
+      await this.reply(jid, msg, `⚡ _Searching & extracting MP3 for "${cleanQuery}"..._`);
+    }
+
+    try {
+      // Stage 2: Background download & live progress update
+      if (statusCardMsgId && this.sock) {
+        const dlMarkup = generateDownloadStatusHtml({
+          botName,
+          type: "AUDIO",
+          query: cleanQuery,
+          title: cleanQuery,
+          status: "DOWNLOADING",
+          progress: 75,
+          bitrate: "320kbps MP3",
+          prefix: p,
+          height: 360,
+        });
+        editHtmlApp(this.sock, jid, statusCardMsgId, dlMarkup, { title: "📥 DOWNLOADING 320KBPS MP3", height: 360 }).catch(() => {});
+      }
+
+      const audioResult = await resolveSongAudio(cleanQuery);
+      if (audioResult.success && audioResult.buffer) {
+        const fileSizeMb = (audioResult.buffer.length / 1024 / 1024).toFixed(2);
+
+        // Stage 3: Live update card to Completed
+        if (statusCardMsgId && this.sock) {
+          const successMarkup = generateDownloadStatusHtml({
+            botName,
+            type: "AUDIO",
+            query: cleanQuery,
+            title: audioResult.title,
+            status: "SUCCESS",
+            progress: 100,
+            duration: audioResult.duration || "03:45",
+            bitrate: audioResult.bitrate || "320kbps MP3",
+            fileSize: `${fileSizeMb} MB`,
+            prefix: p,
+            height: 360,
+          });
+          await editHtmlApp(this.sock, jid, statusCardMsgId, successMarkup, { title: "✅ DOWNLOAD COMPLETED", height: 360 }).catch(() => {});
+        }
+
+        const isSent = await this.sendAudio(
+          jid,
+          msg,
+          audioResult.buffer,
+          audioResult.fileName || `${audioResult.title}.mp3`,
+          audioResult.title,
+          audioResult.thumbnailUrl,
+          audioResult.sourceUrl
+        );
+
+        if (isSent) {
+          await this.sock?.sendMessage(jid, { react: { text: "✅", key: msg.key } }).catch(() => {});
+          // If no card was delivered, send fallback text
+          if (!statusCardMsgId) {
+            const response = `🎶 *${audioResult.title}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⏱️ *Duration:* ${audioResult.duration || "03:45"}\n🔊 *Bitrate:* ${audioResult.bitrate || "320kbps MP3"}\n📦 *Size:* ${fileSizeMb} MB\n⚡ *Speed:* 0.000s Ultra Fast Direct Delivery!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n> ⚡ *ＰＯＷＥＲＥＤ  ＢＹ   ＹＡＳＨＩ   ＨＡＬＬＳ*`.trim();
+            await this.reply(jid, msg, response);
+          }
+        } else {
+          await this.reply(jid, msg, `⚠️ Audio buffer prepared, but failed to transmit to WhatsApp chat. Please retry.`);
+        }
+      } else {
+        this.addLog("WARN", `Audio download failed for "${cleanQuery}": ${audioResult.error}`);
+        if (statusCardMsgId && this.sock) {
+          const errMarkup = generateDownloadStatusHtml({
+            botName,
+            type: "AUDIO",
+            query: cleanQuery,
+            title: cleanQuery,
+            status: "ERROR",
+            errorMessage: audioResult.error || `Could not find an available audio stream for "${cleanQuery}".`,
+            prefix: p,
+            height: 360,
+          });
+          await editHtmlApp(this.sock, jid, statusCardMsgId, errMarkup, { title: "❌ DOWNLOAD FAILED", height: 360 }).catch(() => {});
+        } else {
+          await this.reply(jid, msg, `❌ *Audio Download Failed*\n${audioResult.error || `Could not find an available audio stream for "${cleanQuery}". Please check the spelling or try another song title.`}`);
+        }
+      }
+    } catch (err: any) {
+      this.addLog("ERROR", `cmdSong error: ${err?.message || err}`);
+      await this.reply(jid, msg, `⚠️ *Audio Engine Error:* ${err?.message || "Failed to process audio request"}`);
+    }
+  }  async cmdVideo(jid: string, msg: any, query?: string) {
     const cleanQuery = (query || "").trim();
     if (!cleanQuery) {
       await this.reply(
@@ -4441,22 +4572,102 @@ Upgrade to *YASHI HALLS PRO* for unlimited song & video downloads.`);return}this
     }
 
     this.state.quotas.mediaRequestsUsed++;
+    const p = this.state.config.prefix || ".";
+    const botName = this.state.config.botName || "YASHI HALLS MINI";
     await this.sock?.sendMessage(jid, { react: { text: "🎬", key: msg.key } }).catch(() => {});
-    await this.reply(
-      jid,
-      msg,
-      `⚡ _සොයමින් සහ වීඩියෝව බාගත කරමින් පවතී (Searching & Extracting Video Stream - 2GB Direct Support ✅)..._`
-    );
+
+    // Stage 1: Send Animated In-Chat Searching Card for Video
+    let statusCardMsgId: string | null = null;
+    if (this.sock) {
+      try {
+        const searchingMarkup = generateDownloadStatusHtml({
+          botName,
+          type: "VIDEO",
+          query: cleanQuery,
+          title: cleanQuery,
+          status: "SEARCHING",
+          progress: 25,
+          prefix: p,
+          height: 360,
+        });
+        const cardRes = await sendHtmlApp(this.sock, jid, searchingMarkup, {
+          title: `🎬 ${botName} • DOWNLOADING VIDEO`,
+          height: 360,
+          bypassDownload: true,
+        });
+        if (cardRes.success && cardRes.messageId) {
+          statusCardMsgId = cardRes.messageId;
+        }
+      } catch (cardErr: any) {
+        console.warn("[VIDEO CARD] Initial card send notice:", cardErr?.message || cardErr);
+      }
+    }
+
+    if (!statusCardMsgId) {
+      await this.reply(
+        jid,
+        msg,
+        `⚡ _සොයමින් සහ වීඩියෝව බාගත කරමින් පවතී (Searching & Extracting Video Stream - 2GB Direct Support ✅)..._`
+      );
+    }
 
     try {
+      // Stage 2: Update card to downloading
+      if (statusCardMsgId && this.sock) {
+        const dlMarkup = generateDownloadStatusHtml({
+          botName,
+          type: "VIDEO",
+          query: cleanQuery,
+          title: cleanQuery,
+          status: "DOWNLOADING",
+          progress: 75,
+          quality: "720p HD MP4",
+          prefix: p,
+          height: 360,
+        });
+        editHtmlApp(this.sock, jid, statusCardMsgId, dlMarkup, { title: "📥 DOWNLOADING VIDEO", height: 360 }).catch(() => {});
+      }
+
       const vidRes = await resolveVideo(cleanQuery);
       if (!vidRes.success || !vidRes.videoUrl) {
-        await this.reply(
-          jid,
-          msg,
-          `❌ *Video Extraction Failed:*\n${vidRes.error || "Could not resolve video stream. Please check name or link."}`
-        );
+        if (statusCardMsgId && this.sock) {
+          const errMarkup = generateDownloadStatusHtml({
+            botName,
+            type: "VIDEO",
+            query: cleanQuery,
+            title: cleanQuery,
+            status: "ERROR",
+            errorMessage: vidRes.error || "Could not resolve video stream. Please check name or link.",
+            prefix: p,
+            height: 360,
+          });
+          await editHtmlApp(this.sock, jid, statusCardMsgId, errMarkup, { title: "❌ VIDEO FAILED", height: 360 }).catch(() => {});
+        } else {
+          await this.reply(
+            jid,
+            msg,
+            `❌ *Video Extraction Failed:*\n${vidRes.error || "Could not resolve video stream. Please check name or link."}`
+          );
+        }
         return;
+      }
+
+      // Stage 3: Update card to Success
+      if (statusCardMsgId && this.sock) {
+        const successMarkup = generateDownloadStatusHtml({
+          botName,
+          type: "VIDEO",
+          query: cleanQuery,
+          title: vidRes.title,
+          status: "SUCCESS",
+          progress: 100,
+          duration: vidRes.duration || "Full Length",
+          quality: vidRes.quality || "720p HD MP4",
+          fileSize: vidRes.fileSizeStr || "Under 2GB ✅",
+          prefix: p,
+          height: 360,
+        });
+        await editHtmlApp(this.sock, jid, statusCardMsgId, successMarkup, { title: "✅ VIDEO COMPLETED", height: 360 }).catch(() => {});
       }
 
       const safeTitle = (vidRes.title || cleanQuery).replace(/[/\\?%*:|"<>]/g, "").trim() || "video";
@@ -4465,7 +4676,7 @@ Upgrade to *YASHI HALLS PRO* for unlimited song & video downloads.`);return}this
       if (this.sock) {
         let sent = false;
         // Priority 1: Send in-memory buffer directly
-        if (vidRes.buffer) {
+        if (vidRes.buffer && vidRes.buffer.length > 0) {
           try {
             await this.sock.sendMessage(
               jid,
@@ -4482,8 +4693,8 @@ Upgrade to *YASHI HALLS PRO* for unlimited song & video downloads.`);return}this
           }
         }
 
-        // Priority 2: Direct video url buffer fetch or stream
-        if (!sent && vidRes.videoUrl) {
+        // Priority 2: Direct video url buffer fetch or stream (Only for direct video CDN links)
+        if (!sent && vidRes.videoUrl && vidRes.isDirectDownloadable) {
           try {
             const vResp = await fetch(vidRes.videoUrl, {
               headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
@@ -4523,36 +4734,6 @@ Upgrade to *YASHI HALLS PRO* for unlimited song & video downloads.`);return}this
           }
         }
 
-        // Priority 3: Fallback Baileys stream
-        if (!sent && vidRes.videoUrl) {
-          try {
-            await this.sock.sendMessage(
-              jid,
-              {
-                video: { url: vidRes.videoUrl },
-                caption: captionText,
-                mimetype: "video/mp4"
-              },
-              { quoted: msg }
-            );
-            sent = true;
-          } catch (vidErr: any) {
-            try {
-              await this.sock.sendMessage(
-                jid,
-                {
-                  document: { url: vidRes.videoUrl },
-                  fileName: `${safeTitle}.mp4`,
-                  mimetype: "video/mp4",
-                  caption: captionText
-                },
-                { quoted: msg }
-              );
-              sent = true;
-            } catch {}
-          }
-        }
-
         if (sent) {
           await this.sock.sendMessage(jid, { react: { text: "✅", key: msg.key } }).catch(() => {});
           this.addLog("SUCCESS", `Delivered video: "${vidRes.title}" to ${jid}`);
@@ -4560,8 +4741,37 @@ Upgrade to *YASHI HALLS PRO* for unlimited song & video downloads.`);return}this
         }
       }
 
-      // Fallback direct link card if native upload unavailable
-      const card = `🎬 *${vidRes.title}* 🚀\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📺 *Quality:* ${vidRes.quality || "720p HD MP4"}\n📦 *Size:* ${vidRes.fileSizeStr || "Under 2GB"}\n🔗 *High-Speed Direct Link:* ${vidRes.videoUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n> ⚡ *ＰＯＷＥＲＥＤ  ＢＹ   ＹＡＳＨＩ   ＨＡＬＬＳ*`.trim();
+      // Stream / YouTube rich card
+      const p = this.state.config.prefix || ".";
+      const card = `🎬 *${vidRes.title.toUpperCase()}* 🚀
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏱️ *Duration:* ${vidRes.duration || "Full Length"}
+👤 *Channel:* ${vidRes.author || "YouTube Official"}
+📺 *Quality:* ${vidRes.quality || "1080p / 720p HD"}
+🔗 *Direct Watch Link:* ${vidRes.sourceUrl || vidRes.videoUrl}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 *AUDIO DOWNLOAD (MP3):*
+මෙම වීඩියෝවේ සම්පූර්ණ 320kbps MP3 සින්දුව කෙලින්ම WhatsApp එකට ලබා ගැනීමට පහත command එක එවන්න:
+👉 *${p}song ${vidRes.title}*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+> ⚡ *ＰＯＷＥＲＥＤ  ＢＹ   ＹＡＳＨＩ   ＨＡＬＬＳ*`.trim();
+
+      if (vidRes.thumbnailUrl) {
+        try {
+          const tResp = await fetch(vidRes.thumbnailUrl, { signal: AbortSignal.timeout(4000) });
+          if (tResp.ok) {
+            const tBuf = Buffer.from(await tResp.arrayBuffer());
+            await this.sock?.sendMessage(
+              jid,
+              { image: tBuf, caption: card },
+              { quoted: msg }
+            );
+            await this.sock?.sendMessage(jid, { react: { text: "🎬", key: msg.key } }).catch(() => {});
+            return;
+          }
+        } catch {}
+      }
+
       await this.reply(jid, msg, card);
     } catch (err: any) {
       this.addLog("ERROR", `cmdVideo error: ${err?.message || err}`);
